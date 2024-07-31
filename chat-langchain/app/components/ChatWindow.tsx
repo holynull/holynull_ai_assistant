@@ -112,7 +112,7 @@ export function ChatWindow(props: { conversationId: string }) {
 			const sourceStepName = "FindDocs";
 			let streamedResponse: Record<string, any> = {};
 			const remoteChain = new RemoteRunnable({
-				url: "http://192.168.3.6:8080/chat",
+				url: "http://192.168.3.6:8081/chat",
 				// url: "http://192.168.31.213:8080/chat",
 				options: {
 					timeout: 3000000,
