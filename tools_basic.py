@@ -983,16 +983,16 @@ tools_google = load_tools(["google-scholar", "google-finance"], llm=llm)
 from dune_tools import dune_tools
 
 tools = (
-    tools_google
-    + dune_tools
-    + [
-        searchWebPageToAnswer,
-        searchNewsToAnswer,
-        searchPlacesToAnswer,
-        searchImagesToAnswer,
-        summarizeRelevantContents,
-        summarizeRelevantContentsNews,
-        answerQuestionFromLinks,
+    # tools_google
+    # + dune_tools
+    [
+        # searchWebPageToAnswer,
+        # searchNewsToAnswer,
+        # searchPlacesToAnswer,
+        # searchImagesToAnswer,
+        # summarizeRelevantContents,
+        # summarizeRelevantContentsNews,
+        # answerQuestionFromLinks,
         # summarizeRelevantContents_2,
         # summarizeRelevantContents_3,
         # getHTMLFromURL,
@@ -1011,12 +1011,12 @@ tools = (
         # fetchInfoOfBridges,
         # getVolumeOfDex,
         # fetchVolumeOfDex,
-        Tool(
-            name="CryptocurrencyLatestQuote",
-            func=cmc_last_quote_api.run,
-            description="""useful when you need get a cryptocurrency's latest quote. The input to this should be a single cryptocurrency's symbol.""",
-            coroutine=cmc_last_quote_api.arun,
-        ),
+        # Tool(
+        #     name="CryptocurrencyLatestQuote",
+        #     func=cmc_last_quote_api.run,
+        #     description="""useful when you need get a cryptocurrency's latest quote. The input to this should be a single cryptocurrency's symbol.""",
+        #     coroutine=cmc_last_quote_api.arun,
+        # ),
         # Tool(
         #     name="TrendingLatest",
         #     func=cmc_trending_latest_api.run,
@@ -1041,13 +1041,13 @@ tools = (
         #     description="""useful when you need get all static metadata available for one or more cryptocurrencies. The input to this should be a complete question in English.""",
         #     coroutine=cmc_metadata_api.arun,
         # ),
-        getTokenMetadata,
-        Tool(
-            name="BuyOrSellSignal",
-            func=tradingview.buySellSignal,
-            description="""Useful when you need to know buy and sell signals for a cryptocurrency. The input to this should be a cryptocurrency's symbol.""",
-            coroutine=tradingview.abuySellSignal,
-        ),
+        # getTokenMetadata,
+        # Tool(
+        #     name="BuyOrSellSignal",
+        #     func=tradingview.buySellSignal,
+        #     description="""Useful when you need to know buy and sell signals for a cryptocurrency. The input to this should be a cryptocurrency's symbol.""",
+        #     coroutine=tradingview.abuySellSignal,
+        # ),
         arxiv_search,
         arxiv_load,
     ]

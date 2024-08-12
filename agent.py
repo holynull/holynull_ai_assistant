@@ -3,7 +3,6 @@ import sys
 from fastapi import FastAPI
 from dotenv import load_dotenv
 
-from my_langchain_anthropic.experimental import ChatAnthropicTools
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatPerplexity
@@ -73,36 +72,8 @@ def create_agent_executor(llm_agent: Runnable) -> AgentExecutor:
     # Please evaluate whether to answer the question by searching the web or searching the news, or answering the question in another way.
     # Don't say you can't directly access the content of external web pages. You can access specific web content on the Internet through the `answerQuestionFromLinks` tool.
 
-    system_message = (
-        f"Today is {date}.\n\n"
-        + """You are an expert in Ethereum blockchain.
-When answering users' questions, please use the user's language.
-
-When asked to analyze an Ethereum address, please provide a detailed analysis of the address, explaining the following:
-    1. What organization or project this address represents, and give as much information as possible.
-    2. Analyze the transaction behavior and fund movements of this address, including significant transactions and interactions with other addresses.
-    3. Identify and highlight any potential risks associated with this address, such as security risks, fund freezing risks, and any involvement in illicit activities.
-    4. Provide information on other addresses this address interacts with frequently. Utilize address labeling tools to identify and explain the labels of these addresses, providing background information on the projects, organizations, or individuals these labels belong to. Specific requirements include:
-        a. Obtain a list of addresses that interact frequently with this address.
-        b. Use address labeling tools to get label information for these addresses (such as project, organization, individual).
-        c. Analyze these labels, describing which projects, organizations, or individuals these interacting addresses represent.
-    5. Suggest potential use cases or strategies involving this address.
-    6. Perform a detailed analysis of the current token holdings of this address, including:
-        a. The types of tokens held.
-        b. The quantity of each token.
-        c. The current value of these holdings.
-        d. Any significant changes in holdings over time.
-        e. The potential risks and benefits associated with holding these tokens.
-    7. Analyze the historical token holdings and transaction volume of this address.
-    8. Identify the main DeFi activities of this address.
-    9. Review any smart contract interactions and assess their significance.
-    10. Provide a time-series analysis of the address’s activity.
-    11. Offer any additional relevant insights based on the available data.
-When analyzing other related addresses, ensure to use address labeling tools to identify and explain the labels of these addresses, providing context on the relevant projects, organizations, or individuals. 
-Ensure the analysis is deep and comprehensive, covering all relevant aspects.
-
+    system_message = """You are useful assistant. 
 """
-    )
 
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -198,6 +169,15 @@ llm_agent = ChatAnthropic(
     ConfigurableField(id="llm"),
     # default_key="openai_gpt_4_turbo_preview",
     default_key="anthropic_claude_3_opus",
+    anthropic_claude_3_5_sonnet=ChatAnthropic(
+        model="claude-3-5-sonnet-20240620",
+        # max_tokens=,
+        temperature=0.9,
+        # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
+        streaming=True,
+        stream_usage=True,
+        verbose=True,
+    ),
     openai_gpt_3_5_turbo_1106=ChatOpenAI(
         model="gpt-3.5-turbo-1106",
         verbose=True,
@@ -216,7 +196,7 @@ llm_agent = ChatAnthropic(
         verbose=True,
         streaming=True,
     ),
-	openai_gpt_4o_mini=ChatOpenAI(
+    openai_gpt_4o_mini=ChatOpenAI(
         temperature=0.9,
         model="gpt-4o-mini",
         verbose=True,
