@@ -65,15 +65,13 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+from langchain.prompts import load_prompt
+
 
 def create_agent_executor(llm_agent: Runnable) -> AgentExecutor:
-
-    date = datetime.now().strftime("%b %d %Y")
-    # Please evaluate whether to answer the question by searching the web or searching the news, or answering the question in another way.
-    # Don't say you can't directly access the content of external web pages. You can access specific web content on the Internet through the `answerQuestionFromLinks` tool.
-
-    system_message = """You are useful assistant. 
-"""
+    # 从文件加载系统提示
+    with open("system_prompt.txt", "r", encoding="utf-8") as file:
+        system_message = file.read()
 
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -87,79 +85,23 @@ def create_agent_executor(llm_agent: Runnable) -> AgentExecutor:
         ]
     )
 
-    # from langchain.tools.render import render_text_description
-    # from langchain_core.runnables import RunnablePassthrough
-    # from langchain.agents.format_scratchpad import format_log_to_str
-    # from langchain.agents.output_parsers import ReActSingleInputOutputParser
+    from custom_agent_excutor import CustomToolCallingAgentExecutor
+    from langchain.memory import ConversationBufferMemory
 
-    # react_prompt = hub.pull("hwchase17/react-chat")
-    # react_prompt = react_prompt.partial(
-    #     tools=render_text_description(list(tools)),
-    #     tool_names=", ".join([t.name for t in tools]),
-    # )
-    # openai_agent = (
-    #     {
-    #         "input": lambda x: x["input"],
-    #         "agent_scratchpad": lambda x: format_to_openai_tool_messages(
-    #             x["intermediate_steps"]
-    #         ),
-    #         "chat_history": lambda x: x["chat_history"],
-    #     }
-    #     | prompt
-    #     # | prompt_trimmer # See comment above.
-    #     | llm_agent.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
-    #     | OpenAIToolsAgentOutputParser()
-    # )
-    # anthropic_agent = (
-    #     {
-    #         "input": lambda x: x["input"],
-    #         "agent_scratchpad": lambda x: format_to_anthropic_tool_messages(
-    #             x["intermediate_steps"]
-    #         ),
-    #         "chat_history": lambda x: x["chat_history"],
-    #     }
-    #     | prompt
-    #     # | prompt_trimmer # See comment above.
-    #     | llm_agent.bind(tools=[convert_to_openai_function(tool) for tool in tools])
-    #     | AnthropicToolsAgentOutputParser()
-    # )
-    # react_agent = (
-    #     # {
-    #     #     "input": lambda x: x["input"],
-    #     #     "agent_scratchpad": lambda x: format_log_to_str(
-    #     #         x["intermediate_steps"]
-    #     #     ),
-    #     #     "chat_history": lambda x: x["chat_history"],
-    #     # }
-    #     RunnablePassthrough.assign(
-    #         agent_scratchpad=lambda x: format_log_to_str(x["intermediate_steps"]),
-    #     )
-    #     | react_prompt
-    #     | llm_agent.bind(stop=["\nObservation"])
-    #     | ReActSingleInputOutputParser()
-    # )
-    # agent = anthropic_agent.configurable_alternatives(
-    #     which=ConfigurableField("llm"),
-    #     default_key="anthropic_claude_3_opus",
-    #     openai_gpt_4_turbo_preview=openai_agent,
-    #     openai_gpt_3_5_turbo_1106=openai_agent,
-    #     pplx_sonar_medium_chat=react_agent,
-    #     mistral_large=react_agent,
-    #     command_r_plus=react_agent,
-    # )
-    # llm_with_tools = llm_agent.bind_tools(tools=tools)
-
-    from custom_agent_excutor import CustomAgentExecutor, CustomToolCallingAgentExecutor
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
     executor = CustomToolCallingAgentExecutor(
-        llm=llm_agent, prompts=prompt, tools=tools
+        llm=llm_agent,
+        prompts=prompt,
+        tools=tools,
+        memory=memory,
     )
     return executor
 
 
 llm_agent = ChatAnthropic(
     model="claude-3-opus-20240229",
-    # max_tokens=,
+    max_tokens=2000,
     temperature=0.9,
     # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
     streaming=True,
@@ -171,7 +113,7 @@ llm_agent = ChatAnthropic(
     default_key="anthropic_claude_3_opus",
     anthropic_claude_3_5_sonnet=ChatAnthropic(
         model="claude-3-5-sonnet-20240620",
-        # max_tokens=,
+        max_tokens=2000,
         temperature=0.9,
         # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
         streaming=True,
@@ -213,4 +155,3 @@ llm_agent = ChatAnthropic(
     ),
 )
 
-agent_executor = create_agent_executor(llm_agent=llm_agent)

@@ -63,7 +63,7 @@ export function ChatWindow(props: { conversationId: string }) {
 	const [processingTip, setProcessingTip] = useState("Please input your question.")
 
 	const [chatHistory, setChatHistory] = useState<
-		{ role: string; content: string }[]
+		{ type: string; content: string }[]
 	>([]);
 
 	const sendMessage = async (message?: string) => {
@@ -122,7 +122,8 @@ export function ChatWindow(props: { conversationId: string }) {
 			const streams = await remoteChain.stream(
 				{
 					input: messageValue,
-					chat_history: chatHistory,
+					// chat_history: chatHistory,
+					chat_history: [],
 				},
 				{
 					configurable: {
@@ -142,7 +143,6 @@ export function ChatWindow(props: { conversationId: string }) {
 			var buff_size = 100;
 			var n = 0;
 			for await (const chunk of streams) {
-				console.log(chunk)
 				var _chunk: object
 				if (typeof chunk === "object") {
 					_chunk = chunk as object;
@@ -181,6 +181,7 @@ export function ChatWindow(props: { conversationId: string }) {
 							})
 							break
 						case "on_chat_model_stream":
+							console.log(_chunk)
 							setProcessingTip(prevVal => {
 								return typing_msg
 							})
@@ -228,6 +229,8 @@ export function ChatWindow(props: { conversationId: string }) {
 							}
 							break
 						case "on_tool_start":
+							console.log("on_tool_start")
+							console.log(_chunk)
 							setProcessingTip(prevVal => {
 								return invoking_tool_msg
 							})
@@ -245,7 +248,10 @@ export function ChatWindow(props: { conversationId: string }) {
 							// 		}
 							// 	}
 							// }
+							console.log("on_tool_end")
+							console.log(_chunk)
 							if ("name" in _chunk && (_chunk.name == "searchWebPageToAnswer" || _chunk.name == "searchNewsToAnswer")) {
+
 								if ("data" in _chunk) {
 									var data = _chunk.data as object;
 									if ("output" in data) {
@@ -288,8 +294,8 @@ export function ChatWindow(props: { conversationId: string }) {
 			}
 			setChatHistory((prevChatHistory) => [
 				...prevChatHistory,
-				{ role: "user", content: messageValue },
-				{ role: "assistant", content: accumulatedMessage },
+				{ type: "human", content: messageValue },
+				{ type: "ai", content: accumulatedMessage },
 			]);
 			setIsLoading(false);
 		} catch (e) {

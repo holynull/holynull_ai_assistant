@@ -12,7 +12,8 @@ from langserve import APIHandler, add_routes
 # from langsmith import Client
 from langserve.pydantic_v1 import BaseModel
 
-from agent import agent_executor
+from agent import create_agent_executor
+from agent import llm_agent
 
 # client = Client()
 origins = [
@@ -22,6 +23,7 @@ origins = [
     "http://192.168.3.6:3000",
 ]
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -43,11 +45,7 @@ class Output(BaseModel):
     output: Any
 
 
-api_handler = APIHandler(
-    agent_executor.with_types(input_type=Input, output_type=Output),
-    path="/chat",
-    config_keys=["metadata", "configurable", "tags","llm"],
-)
+agent_executors = {}
 
 
 @app.post("/chat/stream", include_in_schema=False)
@@ -55,6 +53,23 @@ async def simple_invoke(request: Request) -> Response:
     """Handle a request."""
     # The API Handler validates the parts of the request
     # that are used by the runnnable (e.g., input, config fields)
+    body = await request.json()
+    conversation_id = body["config"]["metadata"]["conversation_id"]
+    if conversation_id in agent_executors:
+        agent_executor = agent_executors[conversation_id]
+        api_handler = APIHandler(
+            agent_executor.with_types(input_type=Input, output_type=Output),
+            path="/chat",
+            config_keys=["metadata", "configurable", "tags", "llm"],
+        )
+    else:
+        agent_executor = create_agent_executor(llm_agent=llm_agent)
+        agent_executors[conversation_id] = agent_executor
+        api_handler = APIHandler(
+            agent_executor.with_types(input_type=Input, output_type=Output),
+            path="/chat",
+            config_keys=["metadata", "configurable", "tags", "llm"],
+        )
     return await api_handler.astream_events(request)
 
 

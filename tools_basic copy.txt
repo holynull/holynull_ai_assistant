@@ -247,12 +247,6 @@ llm = ChatAnthropic(
         verbose=True,
         streaming=True,
     ),
-    openai_gpt_4o_mini=ChatOpenAI(
-        temperature=0.9,
-        model="gpt-4o-mini",
-        verbose=True,
-        streaming=True,
-    ),
     pplx_sonar_medium_chat=ChatPerplexity(
         model="sonar-medium-chat", temperature=0.9, verbose=True, streaming=True
     ),
@@ -521,11 +515,11 @@ def getDocumentFromLink(
         html = [Document(clean_html)]
     html = filter_complex_metadata(html)
     html[0].metadata["source"] = ""
-    # docs_text = h2tTransformer.transform_documents(html)
+    docs_text = h2tTransformer.transform_documents(html)
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size, chunk_overlap=chunk_overlap
     )
-    _split = text_splitter.split_documents(html)
+    _split = text_splitter.split_documents(docs_text)
     splits = []
     if len(splits) == 0:
         splits = _split
@@ -620,7 +614,7 @@ Context:
             }
             for _split in splits
         ],
-        config={"configurable": {"model": "openai_gpt_4o_mini"}},
+        config={"configurable": {"model": "openai_gpt_4o"}},
     )
     return "The content snippet obtained from the link is as follows:\n" + (
         "\n" + "#" * 70 + "\n"
@@ -1000,11 +994,9 @@ def load_file(path: str) -> str:
     """
     Useful when you need load file's content.
     """
-    if os.path.exists(path=path):
-        loader = TextLoader(path)
-        docs = loader.load()
-        return "\n".join([doc.page_content for doc in docs])
-    return f"Path not exsits. {path}"
+    loader = TextLoader(path)
+    docs = loader.load()
+    return "\n".join([doc.page_content for doc in docs])
 
 
 import shutil
@@ -1228,6 +1220,6 @@ tools = [
     load_file,
     # copy_file_in_same_directory,
     # write_to_file,
-    # apply_gpt_suggestions,
-    # get_code_modification_suggestions,
+    apply_gpt_suggestions,
+    get_code_modification_suggestions,
 ]

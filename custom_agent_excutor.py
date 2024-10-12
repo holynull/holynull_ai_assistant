@@ -79,6 +79,11 @@ class CustomAgentExecutor(Runnable):
             yield output
 
 
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain.agents import create_tool_calling_agent
+from langchain_core.memory import BaseMemory
+
+
 class CustomToolCallingAgentExecutor(Runnable):
     """A custom runnable that will be used by the agent executor."""
 
@@ -87,6 +92,7 @@ class CustomToolCallingAgentExecutor(Runnable):
         llm: BaseChatModel,
         prompts: ChatPromptTemplate,
         tools: List[BaseTool],
+        memory: BaseMemory,
         **kwargs,
     ):
         """Initialize the runnable."""
@@ -94,6 +100,7 @@ class CustomToolCallingAgentExecutor(Runnable):
         self.llm = llm
         self.tools = tools
         self.prompts = prompts
+        self.memory = memory
 
     def invoke(self, input: Input, config: Optional[RunnableConfig] = None) -> Output:
         if config:
@@ -172,11 +179,11 @@ class CustomToolCallingAgentExecutor(Runnable):
 
         executor = AgentExecutor(
             agent=agent,
+            memory=self.memory,
             tools=self.tools,
             verbose=True,
             handle_parsing_errors=True,
         ).with_config({"run_name": "Eddie's Assistant Agent"})
-
         async for output in executor.astream_events(
             input,
             config=config,
