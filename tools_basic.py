@@ -575,7 +575,7 @@ Context:
             }
             for _split in splits
         ],
-        config={"configurable": {"model": "openai_gpt_4o"}},
+        config={"configurable": {"model": "openai_gpt_4o_mini"}},
     )
     return (
         "The contents of the first three search results are extracted as follows:\n"
@@ -668,7 +668,7 @@ Context:
             }
             for _split in splits
         ],
-        config={"configurable": {"model": "openai_gpt_4o"}},
+        config={"configurable": {"model": "openai_gpt_4o_mini"}},
     )
     return (
         "The contents of the first three search results are extracted as follows:\n"
@@ -1215,6 +1215,62 @@ def apply_gpt_suggestions(source_file_path, suggestions, new_filename=None):
         return None
 
 
+from langchain.document_loaders import PyPDFLoader
+
+
+@tool
+async def pdf_summarize(pdf_path, question):
+    """
+    Asynchronously load a PDF file, process its content, and generate summaries of its sections.
+
+    This function reads a PDF file, splits it into manageable chunks, and creates concise summaries
+    for each chunk. It's useful for quickly grasping the main points of a long document without
+    reading it in its entirety.
+
+    Args:
+    pdf_path (str): Path to the PDF file to be summarized
+    force_reload (bool): Whether to force reload the PDF and reprocess it, ignoring any cached data
+
+    Returns:
+    str: A compilation of summaries from different sections of the PDF, providing an overview
+         of the entire document's content
+    """
+    prompt_template = """
+Please carefully analyze the following text excerpt in relation to the given question. Your task is to extract and present as much relevant information as possible that could be useful in addressing the question. Your response should:
+
+1. Focus on identifying and extracting all pieces of information from the text that are relevant to the question
+2. Include any facts, data, examples, or context that could be helpful in formulating an answer to the question
+3. Present the information in a structured and detailed manner
+4. If the text contains technical terms or concepts related to the question, include explanations of these
+5. Do not attempt to directly answer the question; instead, provide a comprehensive collection of relevant information from the text
+
+Text excerpt:
+{text}
+
+Question: {question}
+
+Relevant information extracted from the text:
+"""
+    chain = ChatPromptTemplate.from_template(prompt_template) | llm | StrOutputParser()
+    loader = PyPDFLoader(pdf_path)
+    documents = loader.load()
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    documents = text_splitter.split_documents(documents=documents)
+    batch_data = [{"text": doc.page_content, "question": question} for doc in documents]
+
+    summaries = chain.batch(
+        batch_data,
+        config={"configurable": {"model": "openai_gpt_4o_mini"}},
+    )
+
+    # Combine all summaries
+    result = "PDF Summary:\n\n"
+    for i, summary in enumerate(summaries, 1):
+        result += f"Section {i} Summary:\n{summary}\n\n"
+
+    return result
+
+
 tools = [
     searchWebPageToAnswer,
     searchNewsToAnswer,
@@ -1226,6 +1282,7 @@ tools = [
     arxiv_search,
     arxiv_load,
     load_file,
+    pdf_summarize,
     # copy_file_in_same_directory,
     # write_to_file,
     # apply_gpt_suggestions,
