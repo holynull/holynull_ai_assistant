@@ -79,7 +79,7 @@ class CustomAgentExecutor(Runnable):
             yield output
 
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, AIMessageChunk
 from langchain.agents import create_tool_calling_agent
 from langchain_core.memory import BaseMemory
 
@@ -196,4 +196,15 @@ class CustomToolCallingAgentExecutor(Runnable):
             exclude_types=exclude_types,
             **kwargs,
         ):
+            # print(output)
+            event = output["event"]
+            if event == "on_chain_end" and "output" in output["data"]:
+                _output = output["data"]["output"]
+                if (
+                    "output" in _output
+                    and len(_output["output"]) > 0
+                    and "text" in _output["output"][0]
+                ):
+                    # Anthropic Claude
+                    print("\n" + _output["output"][0]["text"] + "\n")
             yield output

@@ -15,7 +15,6 @@ from langchain.agents.format_scratchpad.openai_tools import (
 from langchain_community.tools.convert_to_openai import format_tool_to_openai_tool
 from langchain_openai import ChatOpenAI
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
-from my_langchain_anthropic.experimental import ChatAnthropicTools
 from langchain_core.runnables import ConfigurableField
 from anthropic_tools import (
     AnthropicToolsAgentOutputParser,

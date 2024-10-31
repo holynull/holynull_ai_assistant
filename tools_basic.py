@@ -10,7 +10,6 @@ from langchain_core.prompts import (
 )
 from langchain_core.output_parsers import StrOutputParser
 from openai_assistant_tools import GoogleSerperAPIWrapper
-from openai_assistant_tools import MyAPIChain
 import openai_assistant_api_docs
 import json
 from openai_assistant_tools import TradingviewWrapper
@@ -21,7 +20,7 @@ import os
 from langchain.agents import Tool
 from langchain.chains.qa_with_sources.retrieval import RetrievalQAWithSourcesChain
 from rebyte_langchain.rebyte_langchain import RebyteEndpoint
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from langchain.output_parsers import (
     PydanticToolsParser,
     StructuredOutputParser,
@@ -47,49 +46,65 @@ else:
     script_location = Path(__file__).parent.resolve()
 load_dotenv(dotenv_path=script_location / ".env")
 
-
-llm = ChatOpenAI(
-    model="gpt-3.5-turbo-1106",
-    verbose=True,
-)
 headers = {
     "Accepts": "application/json",
     "X-CMC_PRO_API_KEY": os.getenv("CMC_API_KEY"),
 }
-cmc_last_quote_api = MyAPIChain.from_llm_and_api_docs(
-    llm=llm,
-    api_docs=openai_assistant_api_docs.cmc_quote_lastest_api_doc,
-    headers=headers,
-    limit_to_domains=["https://pro-api.coinmarketcap.com"],
+
+llm = ChatAnthropic(
+    model="claude-3-opus-20240229",
+    # max_tokens=,
+    temperature=0.9,
+    # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
+    streaming=True,
     verbose=True,
-)
-cmc_trending_latest_api = MyAPIChain.from_llm_and_api_docs(
-    llm=llm,
-    api_docs=openai_assistant_api_docs.cmc_trending_latest_api_doc,
-    headers=headers,
-    limit_to_domains=["https://pro-api.coinmarketcap.com"],
-    verbose=True,
-)
-cmc_trending_gainers_losers_api = MyAPIChain.from_llm_and_api_docs(
-    llm=llm,
-    api_docs=openai_assistant_api_docs.cmc_trending_gainers_losers_api_doc,
-    headers=headers,
-    limit_to_domains=["https://pro-api.coinmarketcap.com"],
-    verbose=True,
-)
-cmc_trending_most_visited_api = MyAPIChain.from_llm_and_api_docs(
-    llm=llm,
-    api_docs=openai_assistant_api_docs.cmc_trending_most_visited_api_doc,
-    headers=headers,
-    limit_to_domains=["https://pro-api.coinmarketcap.com"],
-    verbose=True,
-)
-cmc_metadata_api = MyAPIChain.from_llm_and_api_docs(
-    llm=llm,
-    api_docs=openai_assistant_api_docs.cmc_metadata_api_doc,
-    headers=headers,
-    limit_to_domains=["https://pro-api.coinmarketcap.com"],
-    verbose=True,
+).configurable_alternatives(  # This gives this field an id
+    # When configuring the end runnable, we can then use this id to configure this field
+    ConfigurableField(id="model"),
+    # default_key="openai_gpt_4_turbo_preview",
+    default_key="anthropic_claude_3_opus",
+    anthropic_claude_3_5_sonnet=ChatAnthropic(
+        model="claude-3-5-sonnet-20240620",
+        max_tokens=2000,
+        temperature=0.9,
+        # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
+        streaming=True,
+        stream_usage=True,
+        verbose=True,
+    ),
+    openai_gpt_3_5_turbo_1106=ChatOpenAI(
+        model="gpt-3.5-turbo-1106",
+        verbose=True,
+        streaming=True,
+        temperature=0.9,
+    ),
+    openai_gpt_4_turbo_preview=ChatOpenAI(
+        temperature=0.9,
+        model="gpt-4-turbo-2024-04-09",
+        verbose=True,
+        streaming=True,
+    ),
+    openai_gpt_4o=ChatOpenAI(
+        temperature=0.9,
+        model="gpt-4o",
+        verbose=True,
+        streaming=True,
+    ),
+    openai_gpt_4o_mini=ChatOpenAI(
+        temperature=0.9,
+        model="gpt-4o-mini",
+        verbose=True,
+        streaming=True,
+    ),
+    pplx_sonar_medium_chat=ChatPerplexity(
+        model="sonar-medium-chat", temperature=0.9, verbose=True, streaming=True
+    ),
+    mistral_large=ChatMistralAI(
+        model="mistral-large-latest", temperature=0.9, verbose=True, streaming=True
+    ),
+    command_r_plus=ChatCohere(
+        model="command-r-plus", temperature=0.9, verbose=True, streaming=True
+    ),
 )
 
 
@@ -208,70 +223,6 @@ class GoogleSearchEngineResult(BaseModel):
     # imageUrl: str
 
 
-llm = ChatAnthropic(
-    model="claude-3-opus-20240229",
-    # max_tokens=,
-    temperature=0.9,
-    # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
-    streaming=True,
-    verbose=True,
-).configurable_alternatives(  # This gives this field an id
-    # When configuring the end runnable, we can then use this id to configure this field
-    ConfigurableField(id="model"),
-    # default_key="openai_gpt_4_turbo_preview",
-    default_key="anthropic_claude_3_opus",
-    anthropic_claude_3_5_sonnet=ChatAnthropic(
-        model="claude-3-5-sonnet-20240620",
-        max_tokens=2000,
-        temperature=0.9,
-        # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
-        streaming=True,
-        stream_usage=True,
-        verbose=True,
-    ),
-    openai_gpt_3_5_turbo_1106=ChatOpenAI(
-        model="gpt-3.5-turbo-1106",
-        verbose=True,
-        streaming=True,
-        temperature=0.9,
-    ),
-    openai_gpt_4_turbo_preview=ChatOpenAI(
-        temperature=0.9,
-        model="gpt-4-turbo-2024-04-09",
-        verbose=True,
-        streaming=True,
-    ),
-    openai_gpt_4o=ChatOpenAI(
-        temperature=0.9,
-        model="gpt-4o",
-        verbose=True,
-        streaming=True,
-    ),
-    openai_gpt_4o_mini=ChatOpenAI(
-        temperature=0.9,
-        model="gpt-4o-mini",
-        verbose=True,
-        streaming=True,
-    ),
-    pplx_sonar_medium_chat=ChatPerplexity(
-        model="sonar-medium-chat", temperature=0.9, verbose=True, streaming=True
-    ),
-    mistral_large=ChatMistralAI(
-        model="mistral-large-latest", temperature=0.9, verbose=True, streaming=True
-    ),
-    command_r_plus=ChatCohere(
-        model="command-r-plus", temperature=0.9, verbose=True, streaming=True
-    ),
-    rebyte_agent=RebyteEndpoint(
-        rebyte_api_key=os.getenv("REBYTE_API_KEY"),
-        project_id=os.getenv("REBYTE_PROJECT_ID"),
-        agent_id=os.getenv("REBYTE_AGENT_ID"),
-        # session_id="oolLdHU2Rro-Y-HSMtD1z",
-        # streaming=True,
-    ),
-)
-
-
 @tool
 def searchNewsToAnswer(question: str) -> str:
     """Useful when you need answer questions use news. Input for this should be a complete question or request.
@@ -307,6 +258,14 @@ The `tbs` parameter of the Google Search API is a very useful tool that allows y
 - Besides time filtering, the `tbs` parameter can be used for other advanced search features, though these are generally less discussed and documented.
 - When using the Google Search API, ensure you comply with its terms of use, including but not limited to rate limits, restrictions on commercial usage, etc.
 
+Return Example:
+```json
+{{
+	"terms":"Hello World Keywords",
+    "tbs":"qdr:w"
+}}
+```
+
 Question:{question}
 """
     chain_0 = (
@@ -322,10 +281,10 @@ Question:{question}
     )
     query = chain_0.invoke(
         {"question": question},
-        config={"configurable": {"model": "openai_gpt_3_5_turbo_1106"}},
+        config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
     )
     print(query)
-    newsSearch = GoogleSerperAPIWrapper(type="news", tbs=query.tbs)
+    newsSearch = GoogleSerperAPIWrapper(type="news", tbs=query.tbs, k=20)
     results = newsSearch.results(query=query.terms)
     if "news" in results:
         results = results["news"]
@@ -362,6 +321,13 @@ def searchWebPageToAnswer(question: str) -> str:
 Generate Google search parameters `terms` based on the question. 
 Extract the keywords required for search from the question.
 
+Return Example:
+```json
+{{
+	"terms":"Hello World Keywords"
+}}
+```
+
 Question:{question}
 """
     chain_0 = (
@@ -377,10 +343,10 @@ Question:{question}
     )
     query = chain_0.invoke(
         {"question": question},
-        config={"configurable": {"model": "openai_gpt_3_5_turbo_1106"}},
+        config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
     )
     print(query)
-    newsSearch = GoogleSerperAPIWrapper(type="search")
+    newsSearch = GoogleSerperAPIWrapper(type="search", k=20)
     results = newsSearch.results(query=query.terms)
     if "news" in results:
         results = results["news"]
@@ -430,7 +396,7 @@ Question:{question}
     )
     query = chain_0.invoke(
         {"question": question},
-        config={"configurable": {"model": "openai_gpt_3_5_turbo_1106"}},
+        config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
     )
     print(query)
     newsSearch = GoogleSerperAPIWrapper(type="places")
@@ -475,7 +441,7 @@ Question:{question}
     )
     query = chain_0.invoke(
         {"question": question},
-        config={"configurable": {"model": "openai_gpt_3_5_turbo_1106"}},
+        config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
     )
     print(query)
     newsSearch = GoogleSerperAPIWrapper(type="images")
@@ -575,7 +541,7 @@ Context:
             }
             for _split in splits
         ],
-        config={"configurable": {"model": "openai_gpt_4o_mini"}},
+        config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
     )
     return (
         "The contents of the first three search results are extracted as follows:\n"
@@ -620,7 +586,7 @@ Context:
             }
             for _split in splits
         ],
-        config={"configurable": {"model": "openai_gpt_4o_mini"}},
+        config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
     )
     return "The content snippet obtained from the link is as follows:\n" + (
         "\n" + "#" * 70 + "\n"
@@ -668,7 +634,7 @@ Context:
             }
             for _split in splits
         ],
-        config={"configurable": {"model": "openai_gpt_4o_mini"}},
+        config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
     )
     return (
         "The contents of the first three search results are extracted as follows:\n"
@@ -696,38 +662,6 @@ async def fetch_page(url):
     html_content = await page.content()
     await browser.close()
     return html_content
-
-
-@tool
-async def get_contents(links: List[str]):
-    """Get the contents of a webpage.
-    The links passed in should be a list of links returned from `search`.
-    """
-    req_tasks = []
-    results = []
-    for url in links:
-        req_tasks.append(fetch_page(url=url))
-        results.append(
-            {
-                "url": url,
-            }
-        )
-    contents = await asyncio.gather(*req_tasks)
-    extract_task = []
-    for _content in contents:
-        no_html = remove_html_tags(_content)
-        prompt = ChatPromptTemplate.from_template(
-            """I have a piece of text that I need you to help summarize, but please ensure that the summary does not exceed 100 words. Here is the text that needs to be summarized: {input}."""
-        )
-        model = ChatOpenAI(model="gpt-3.5-turbo-1106", verbose=True)
-        output_parser = StrOutputParser()
-        chain = prompt | model | output_parser
-        task = chain.with_config({"verbose": True}).ainvoke({"input": no_html})
-        extract_task.append(task)
-    _extracts = await asyncio.gather(*extract_task)
-    for i in range(len(results)):
-        results[i]["extract"] = _extracts[i]
-    return json.dumps(results) if len(results) > 0 else f"There is no any result"
 
 
 # from langchain_community.tools.arxiv.tool import ArxivQueryRun
@@ -847,158 +781,13 @@ async def getHTMLFromURLs(urls: list[str]) -> str:
     return result
 
 
-from defillama_wrapper import (
-    DefiLLamaWrapTVLofPtotocols,
-    DefiLLamaWrapCirculatingVolumeOfStablecoins,
-    DefiLLamaWrapTotalCirculatingVolumeOfStablecoins,
-    DefiLLamaWrapYeildsAPYOfPools,
-)
-
-# tvlPotocols = DefiLLamaWrapTVLofPtotocols()
-# cvOfSc = DefiLLamaWrapCirculatingVolumeOfStablecoins()
-# tcvOfSc = DefiLLamaWrapTotalCirculatingVolumeOfStablecoins()
-# apyOfPools = DefiLLamaWrapYeildsAPYOfPools()
-
-# @tool
-# def getTVLOfDefiProject(question: str) -> str:
-#     """ "useful when you need get TVL and info of defi project. The input to this should be a complete question about tvl."""
-#     # agent = tvlPotocols.create_agent()
-#     agent = tvlPotocols.create_agent().with_config(
-#         {"configurable": {"llm": "openai_gpt_4_turbo_preview"}}
-#     )
-#     excutor = AgentExecutor(
-#         agent=agent,
-#         tools=tvlPotocols.tools,
-#         verbose=True,
-#     )
-#     result = excutor.invoke({"input": question})
-#     return result["output"]
-
-# @tool
-# def fetchTVLOfDefiProject(question: str) -> str:
-#     """ "useful when you need fetch TVL and info of defi project."""
-#     tvlPotocols.fetch()
-#     return getTVLOfDefiProject(question)
-
-# @tool
-# def getCirculatingVolumeOfStablecoin(question: str) -> str:
-#     """ "useful when you need get circulating volume of stablecoin. The input to this should be a complete question about circulating volume."""
-#     # agent = tvlPotocols.create_agent()
-#     agent = cvOfSc.create_agent().with_config(
-#         {"configurable": {"llm": "openai_gpt_4_turbo_preview"}}
-#     )
-#     excutor = AgentExecutor(
-#         agent=agent,
-#         tools=cvOfSc.tools,
-#         verbose=True,
-#     )
-#     result = excutor.invoke({"input": question})
-#     return result["output"]
-
-# @tool
-# def fetchCirculatingVolumeOfStablecoin(question: str) -> str:
-#     """ "useful when you need fetch Circulating Volume of stablecoin."""
-#     cvOfSc.fetch()
-#     return getCirculatingVolumeOfStablecoin(question)
-
-# @tool
-# def getTotalCirculatingVolumeOfStablecoin(question: str) -> str:
-#     """ "useful when you need get the volume of fait currency pegged to the chain. The input to this should be a complete question about volume of fait currency pegged."""
-#     # agent = tvlPotocols.create_agent()
-#     agent = tcvOfSc.create_agent().with_config(
-#         {"configurable": {"llm": "openai_gpt_4_turbo_preview"}}
-#     )
-#     excutor = AgentExecutor(
-#         agent=agent,
-#         tools=tcvOfSc.tools,
-#         verbose=True,
-#     )
-#     result = excutor.invoke({"input": question})
-#     return result["output"]
-
-# @tool
-# def fetchTotalCirculatingVolumeOfStablecoin(question: str) -> str:
-#     """ "useful when you need fetch the volume of fait currency pegged to."""
-#     tcvOfSc.fetch()
-#     return getTotalCirculatingVolumeOfStablecoin(question)
-
-# @tool
-# def getYieldsAndAPYOfPools(question: str) -> str:
-#     """ "useful when you need get yields or APY of defi pools. The input to this should be a complete question about yields or APY."""
-#     # agent = tvlPotocols.create_agent()
-#     agent = apyOfPools.create_agent().with_config(
-#         {"configurable": {"llm": "openai_gpt_4_turbo_preview"}}
-#     )
-#     excutor = AgentExecutor(
-#         agent=agent,
-#         tools=apyOfPools.tools,
-#         verbose=True,
-#     )
-#     result = excutor.invoke({"input": question})
-#     return result["output"]
-
-# @tool
-# def fetchYieldsAndAPYOfPools(question: str) -> str:
-#     """useful when you need fetch yields or APY of defi pools."""
-#     apyOfPools.fetch()
-#     return getYieldsAndAPYOfPools(question)
-
-# from defillama_wrapper import DefiLLamaWrapInfoOfBridges
-
-# infoOfBridges = DefiLLamaWrapInfoOfBridges()
-
-# @tool
-# def getInfoOfBridges(question: str) -> str:
-#     """useful when you need get info of a cross-chain bridges. The input to this should be a complete question about cross-chain bridge."""
-#     # agent = tvlPotocols.create_agent()
-#     agent = infoOfBridges.create_agent().with_config(
-#         {"configurable": {"llm": "openai_gpt_4_turbo_preview"}}
-#     )
-#     excutor = AgentExecutor(
-#         agent=agent,
-#         tools=infoOfBridges.tools,
-#         verbose=True,
-#     )
-#     result = excutor.invoke({"input": question})
-#     return result["output"]
-
-# @tool
-# def fetchInfoOfBridges(question: str) -> str:
-#     """useful when you need fetch info of a cross-chain bridges."""
-#     infoOfBridges.fetch()
-#     return getInfoOfBridges(question)
-
-# from defillama_wrapper import DefiLLamaWrapVolumeOfDex
-
-# vOfDex = DefiLLamaWrapVolumeOfDex()
-
-# @tool
-# def getVolumeOfDex(question: str) -> str:
-#     """useful when you need get volume of a Dex. The input to this should be a complete question about dex's volume."""
-#     # agent = tvlPotocols.create_agent()
-#     agent = vOfDex.create_agent().with_config(
-#         {"configurable": {"llm": "openai_gpt_4_turbo_preview"}}
-#     )
-#     excutor = AgentExecutor(
-#         agent=agent,
-#         tools=vOfDex.tools,
-#         verbose=True,
-#     )
-#     result = excutor.invoke({"input": question})
-#     return result["output"]
-
-# @tool
-# def fetchVolumeOfDex(question: str) -> str:
-#     """useful when you need fetch volume of a dex."""
-#     vOfDex.fetch()
-#     return getVolumeOfDex(question)
 from langchain_community.document_loaders import TextLoader
 
 
 @tool
-def load_file(path: str) -> str:
+def load_python_file(path: str) -> str:
     """
-    Useful when you need load file's content.
+    Useful when you need load python file's content.
     """
     if os.path.exists(path=path):
         loader = TextLoader(path)
@@ -1229,7 +1018,7 @@ async def pdf_summarize(pdf_path, question):
 
     Args:
     pdf_path (str): Path to the PDF file to be summarized
-    force_reload (bool): Whether to force reload the PDF and reprocess it, ignoring any cached data
+    question (str): User's question about the PDF file, and in user's language.
 
     Returns:
     str: A compilation of summaries from different sections of the PDF, providing an overview
@@ -1242,7 +1031,7 @@ Please carefully analyze the following text excerpt in relation to the given que
 2. Include any facts, data, examples, or context that could be helpful in formulating an answer to the question
 3. Present the information in a structured and detailed manner
 4. If the text contains technical terms or concepts related to the question, include explanations of these
-5. Do not attempt to directly answer the question; instead, provide a comprehensive collection of relevant information from the text
+5. Match the language of your output to the language used in the question
 
 Text excerpt:
 {text}
@@ -1256,11 +1045,15 @@ Relevant information extracted from the text:
     documents = loader.load()
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     documents = text_splitter.split_documents(documents=documents)
+    # for doc in documents:
+    #     negtive, text = moderation(doc.page_content)
+    #     if negtive:
+    #         return text
     batch_data = [{"text": doc.page_content, "question": question} for doc in documents]
 
     summaries = chain.batch(
         batch_data,
-        config={"configurable": {"model": "openai_gpt_4o_mini"}},
+        config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
     )
 
     # Combine all summaries
@@ -1269,6 +1062,52 @@ Relevant information extracted from the text:
         result += f"Section {i} Summary:\n{summary}\n\n"
 
     return result
+
+
+from langchain.chains.moderation import OpenAIModerationChain
+
+
+import requests
+import json
+from typing import Dict, Any
+
+
+def moderation(text: str) -> Dict[str, Any]:
+    """
+    Use OpenAI's Moderation API to check if the input text complies with community standards,
+    filtering out inappropriate or harmful content.
+
+    Args:
+    text (str): The text to be moderated
+
+    Returns:
+    Dict[str, Any]: A dictionary containing the moderation results
+    """
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
+    }
+    data = {"input": text, "model": "omni-moderation-latest"}
+
+    response = requests.post(
+        "https://api.openai.com/v1/moderations", headers=headers, data=json.dumps(data)
+    )
+
+    if response.status_code != 200:
+        raise Exception(f"API request failed with status code: {response.status_code}")
+
+    result = response.json()
+    print(text)
+    print(result)
+    if result["results"][0]["flagged"]:
+        return True, "Result was found that violates Mlion's content policy."
+    else:
+        return False, None
+    # return {
+    #     "flagged": result["results"][0]["flagged"],
+    #     "categories": result["results"][0]["categories"],
+    #     "category_scores": result["results"][0]["category_scores"]
+    # }
 
 
 tools = [
@@ -1281,7 +1120,7 @@ tools = [
     answerQuestionFromLinks,
     arxiv_search,
     arxiv_load,
-    load_file,
+    load_python_file,
     pdf_summarize,
     # copy_file_in_same_directory,
     # write_to_file,

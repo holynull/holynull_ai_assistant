@@ -69,13 +69,12 @@ from langchain.prompts import load_prompt
 
 
 def create_agent_executor(llm_agent: Runnable) -> AgentExecutor:
-    # 从文件加载系统提示
-    with open("system_prompt.txt", "r", encoding="utf-8") as file:
-        system_message = file.read()
+
+    from system_prompt import system_prompt
 
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", system_message),
+            ("system", system_prompt),
             MessagesPlaceholder(variable_name="chat_history"),
             # SystemMessagePromptTemplate.from_template(
             #     "If using the search tool, prefix the string parameter with [S]."
@@ -154,4 +153,3 @@ llm_agent = ChatAnthropic(
         model="command-r-plus", temperature=0.9, verbose=True, streaming=True
     ),
 )
-
