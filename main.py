@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from agent import create_agent_executor
 from agent import llm_agent
+from langchain.memory import ConversationBufferMemory
 
 # client = Client()
 origins = [
@@ -38,13 +39,14 @@ from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
 
 class Input(BaseModel):
     input: str
+    image_urls: list[str]
     chat_history: List[Union[HumanMessage, AIMessage, FunctionMessage]]
 
 
 class Output(BaseModel):
     output: Any
 
-
+chat_memories = {}
 agent_executors = {}
 
 
@@ -55,20 +57,45 @@ async def simple_invoke(request: Request) -> Response:
     # that are used by the runnnable (e.g., input, config fields)
     body = await request.json()
     conversation_id = body["config"]["metadata"]["conversation_id"]
-    if conversation_id in agent_executors:
-        agent_executor = agent_executors[conversation_id]
+    is_multimodal = body["config"]["metadata"]["is_multimodal"]
+    image_urls = body["input"]["image_urls"]
+    if conversation_id in chat_memories:
+        # agent_executor = agent_executors[conversation_id]
+        memory = chat_memories[conversation_id]
+        agent_executor = create_agent_executor(
+            llm_agent=llm_agent,
+            memory=memory,
+            is_multimodal=is_multimodal,
+            image_urls=image_urls,
+        )
+        agent_executors[conversation_id] = {
+            "executor": agent_executor,
+            "is_multimodal": is_multimodal,
+        }
         api_handler = APIHandler(
-            runnable=agent_executor.with_types(input_type=Input, output_type=Output),
+            agent_executor.with_types(input_type=Input, output_type=Output),
             path="/chat",
-            # config_keys=["metadata", "configurable", "tags"],
+            # config_keys=["metadata", "configurable", "tags", "llm"],
         )
     else:
-        agent_executor = create_agent_executor(llm_agent=llm_agent)
-        agent_executors[conversation_id] = agent_executor
+        memory = ConversationBufferMemory(
+            input_key="input", memory_key="chat_history", return_messages=True
+        )
+        agent_executor = create_agent_executor(
+            llm_agent=llm_agent,
+            memory=memory,
+            is_multimodal=is_multimodal,
+            image_urls=image_urls,
+        )
+        chat_memories[conversation_id] = memory
+        agent_executors[conversation_id] = {
+            "executor": agent_executor,
+            "is_multimodal": is_multimodal,
+        }
         api_handler = APIHandler(
-            runnable=agent_executor.with_types(input_type=Input, output_type=Output),
+            agent_executor.with_types(input_type=Input, output_type=Output),
             path="/chat",
-            # config_keys=["metadata", "configurable", "tags"],
+            # config_keys=["metadata", "configurable", "tags", "llm"],
         )
     return await api_handler.astream_events(request)
 

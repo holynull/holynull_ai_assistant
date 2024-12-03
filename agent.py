@@ -40,8 +40,10 @@ from langchain_core.runnables import Runnable
 
 
 from langchain import hub
+from custom_agent_excutor import CustomToolCallingAgentExecutor
 from tools_basic import tools
 from eddie_tools import getHTMLOfURL
+from langchain.memory.chat_memory import BaseMemory
 
 if getattr(sys, "frozen", False):
     script_location = Path(sys.executable).parent.resolve()
@@ -68,26 +70,57 @@ app.add_middleware(
 from langchain.prompts import load_prompt
 
 
-def create_agent_executor(llm_agent: Runnable) -> AgentExecutor:
+def create_agent_executor(
+    llm_agent: Runnable,
+    memory: BaseMemory,
+    image_urls: list[str],
+    is_multimodal: bool = False,
+) -> AgentExecutor:
 
     from system_prompt import system_prompt
 
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", system_prompt),
-            MessagesPlaceholder(variable_name="chat_history"),
-            # SystemMessagePromptTemplate.from_template(
-            #     "If using the search tool, prefix the string parameter with [S]."
-            # ),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ]
-    )
-
-    from custom_agent_excutor import CustomToolCallingAgentExecutor
-    from langchain.memory import ConversationBufferMemory
-
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    if is_multimodal:
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_prompt),
+                MessagesPlaceholder(variable_name="chat_history"),
+                # SystemMessagePromptTemplate.from_template(
+                #     "If using the search tool, prefix the string parameter with [S]."
+                # ),
+                (
+                    "human",
+                    [
+                        *[
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"{url}"},
+                            }
+                            for url in image_urls
+                        ],
+                        {
+                            "type": "text",
+                            "text": "{input}",
+                        },
+                    ],
+                ),
+                MessagesPlaceholder(variable_name="agent_scratchpad"),
+            ],
+        )
+    else:
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_prompt),
+                MessagesPlaceholder(variable_name="chat_history"),
+                # SystemMessagePromptTemplate.from_template(
+                #     "If using the search tool, prefix the string parameter with [S]."
+                # ),
+                (
+                    "human",
+                    "{input}",
+                ),
+                MessagesPlaceholder(variable_name="agent_scratchpad"),
+            ]
+        )
 
     executor = CustomToolCallingAgentExecutor(
         llm=llm_agent,
@@ -111,7 +144,7 @@ llm_agent = ChatAnthropic(
     # default_key="openai_gpt_4_turbo_preview",
     default_key="anthropic_claude_3_opus",
     anthropic_claude_3_5_sonnet=ChatAnthropic(
-        model="claude-3-5-sonnet-20240620",
+        model="claude-3-5-sonnet-20241022",
         max_tokens=2000,
         temperature=0.9,
         # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
@@ -145,6 +178,9 @@ llm_agent = ChatAnthropic(
     ),
     pplx_sonar_medium_chat=ChatPerplexity(
         model="sonar-medium-chat", temperature=0.9, verbose=True, streaming=True
+    ),
+	pplx_sonar_large_chat=ChatPerplexity(
+        model="llama-3.1-sonar-large-128k-online", temperature=0.9, verbose=True, streaming=True
     ),
     mistral_large=ChatMistralAI(
         model="mistral-large-latest", temperature=0.1, verbose=True, streaming=True
