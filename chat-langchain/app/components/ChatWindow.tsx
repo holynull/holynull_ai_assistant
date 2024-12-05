@@ -510,16 +510,62 @@ export function ChatWindow(props: { conversationId: string }) {
 		let sources: Source[] | undefined = undefined;
 		let messageIndex: number | null = null;
 
+		const markdownStyles = {
+			code: `
+			  background-color: #1e1e2e;
+			  color: #cdd6f4;
+			  padding: 0.2em 0.4em;
+			  border-radius: 3px;
+			  font-size: 0.9em;
+			  font-family: 'Fira Code', monospace;
+			`,
+			pre: `
+			  background-color: #1e1e2e;
+			  padding: 1em;
+			  border-radius: 8px;
+			  overflow-x: auto;
+			  margin: 1em 0;
+			  border: 1px solid #313244;
+			`,
+			blockquote: `
+			  border-left: 4px solid #7f849c;
+			  margin: 1em 0;
+			  padding: 0.5em 1em;
+			  background-color: #27273a;
+			  border-radius: 4px;
+			`,
+			table: `
+			  width: 100%;
+			  border-collapse: collapse;
+			  margin: 1em 0;
+			`,
+			th: `
+			  background-color: #313244;
+			  padding: 0.75em;
+			  border: 1px solid #45475a;
+			  text-align: left;
+			`,
+			td: `
+			  padding: 0.75em;
+			  border: 1px solid #45475a;
+			`,
+			link: `
+			  color: #89b4fa;
+			  text-decoration: none;
+			  &:hover {
+				text-decoration: underline;
+			  }
+			`,
+			list: `
+			  padding-left: 1.5em;
+			  margin: 0.5em 0;
+			`,
+			listItem: `
+			  margin: 0.3em 0;
+			`,
+		};
 		let renderer = new Renderer();
-		renderer.paragraph = (text) => {
-			return text + "\n";
-		};
-		renderer.list = (text) => {
-			return `${text}\n\n`;
-		};
-		renderer.listitem = (text) => {
-			return `\n• ${text}`;
-		};
+
 		renderer.code = (code, language) => {
 			const validLanguage = hljs.getLanguage(language || "")
 				? language
@@ -530,7 +576,71 @@ export function ChatWindow(props: { conversationId: string }) {
 			).value;
 			return `<pre class="highlight bg-gray-700" style="padding: 5px; border-radius: 5px; overflow: auto; overflow-wrap: anywhere; white-space: pre-wrap; max-width: 100%; display: block; line-height: 1.2"><code class="${language}" style="color: #d6e2ef; font-size: 12px; ">${highlightedCode}</code></pre>`;
 		};
-		marked.setOptions({ renderer });
+
+		renderer.blockquote = (quote) => {
+			return `<blockquote style="${markdownStyles.blockquote}">${quote}</blockquote>`;
+		};
+
+		renderer.table = (header, body) => {
+			return `<table style="${markdownStyles.table}">
+			  <thead>${header}</thead>
+			  <tbody>${body}</tbody>
+			</table>`;
+		};
+
+		renderer.tablerow = (content) => {
+			return `<tr>${content}</tr>`;
+		};
+
+		renderer.tablecell = (content, flags) => {
+			const type = flags.header ? 'th' : 'td';
+			const style = flags.header ? markdownStyles.th : markdownStyles.td;
+			return `<${type} style="${style}">${content}</${type}>`;
+		};
+
+		renderer.link = (href, title, text) => {
+			return `<a href="${href}" title="${title || ''}" 
+			  style="${markdownStyles.link}" 
+			  target="_blank" 
+			  rel="noopener noreferrer">${text}</a>`;
+		};
+
+		renderer.list = (body, ordered) => {
+			const type = ordered ? 'ol' : 'ul';
+			return `<${type} style="${markdownStyles.list}">${body}</${type}>`;
+		};
+
+		renderer.listitem = (text) => {
+			return `<li style="${markdownStyles.listItem}">${text}</li>`;
+		};
+
+		// 设置 marked 选项
+		marked.setOptions({
+			renderer,
+			highlight: function (code, language) {
+				if (language && hljs.getLanguage(language)) {
+					try {
+						return hljs.highlight(code, {
+							language: language,
+							ignoreIllegals: true
+						}).value;
+					} catch (err) {
+						console.error(err);
+						return code;
+					}
+				}
+				return code;
+			},
+			pedantic: false,
+			gfm: true,
+			breaks: true,
+			sanitize: false,
+			smartLists: true,
+			smartypants: false,
+			xhtml: false
+		});
+
+
 		try {
 			const sourceStepName = "FindDocs";
 			let streamedResponse: Record<string, any> = {};

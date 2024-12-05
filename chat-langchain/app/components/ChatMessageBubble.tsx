@@ -14,7 +14,9 @@ import {
 	Divider,
 	Spacer,
 	Image,
-	Grid
+	Grid,
+	styled,
+	chakra
 } from "@chakra-ui/react";
 import { sendFeedback } from "../utils/sendFeedback";
 import { apiBaseUrl } from "../utils/constants";
@@ -257,6 +259,136 @@ export function ChatMessageBubble(props: {
 			emojis: buttonId === "upButton" ? ["👍"] : ["👎"],
 		});
 	};
+	const MessageContent = chakra(Box, {
+		baseStyle: {
+			'.markdown-content': {
+				'h1, h2, h3, h4, h5, h6': {
+					marginTop: '1.5em',
+					marginBottom: '0.5em',
+					fontWeight: 600,
+					color: '#cdd6f4'
+				},
+				'h1': { fontSize: '2em' },
+				'h2': { fontSize: '1.5em' },
+				'h3': { fontSize: '1.3em' },
+				'h4': { fontSize: '1.1em' },
+				'p': {
+					margin: '0.5em 0',  // 减小段落间距
+					lineHeight: 1.4     // 减小行间距
+				},
+				// 统一使用相同的符号样式
+				'ul': {
+					listStyle: 'none',
+					margin: '0.5em 0',  // 减小列表间距
+					paddingLeft: '1.5em',
+					'& > li': {
+						position: 'relative',
+						marginBottom: '0.3em',  // 减小列表项间距
+						paddingLeft: '3em',
+						'&::before': {
+							content: '"▪"',  // 使用实心方块作为列表符号
+							position: 'absolute',
+							left: 0,
+							color: '#89b4fa',
+							fontWeight: 'bold',
+							paddingLeft: '1.5em',
+						}
+					}
+				},
+				'ol': {
+					listStyle: 'none',
+					margin: '0.5em 0',  // 减小列表间距
+					'& > li': {
+						position: 'relative',
+						marginBottom: '0.3em',  // 减小列表项间距
+						paddingLeft: '1.5em',
+						'&::before': {
+							content: '"▶"',  // 使用实心方块作为列表符号
+							position: 'absolute',
+							left: 0,
+							color: '#89b4fa',
+							fontWeight: 'bold',
+						}
+					},
+					// 为ol下的ul添加额外的缩进
+					'& ul': {
+						paddingLeft: '1.5em',  // 增加缩进
+						marginTop: '0.3em',
+						marginBottom: '0.3em',
+					}
+				},
+				'li > ul, li > ol': {
+					marginTop: '0.3em',    // 减小嵌套列表间距
+					marginBottom: '0.3em', // 减小嵌套列表间距
+				},
+				'img': {
+					maxWidth: '100%',
+					borderRadius: '4px',
+					margin: '1em 0'
+				},
+				'hr': {
+					border: 'none',
+					borderTop: '1px solid #45475a',
+					margin: '1.5em 0'
+				},
+				'blockquote': {
+					borderLeft: '4px solid #89b4fa',
+					padding: '0.5em 1em',
+					margin: '1em 0',
+					backgroundColor: 'rgba(137, 180, 250, 0.1)',
+					borderRadius: '0 4px 4px 0',
+				},
+				'code': {
+					backgroundColor: '#1e1e2e',
+					padding: '0.2em 0.4em',
+					borderRadius: '3px',
+					fontSize: '0.9em',
+					fontFamily: 'monospace',
+					color: '#f38ba8'
+				},
+				'pre': {
+					backgroundColor: '#1e1e2e',
+					padding: '1em',
+					borderRadius: '8px',
+					overflow: 'auto',
+					margin: '1em 0',
+					border: '1px solid #313244',
+					'& code': {
+						backgroundColor: 'transparent',
+						padding: 0,
+						color: '#cdd6f4'
+					}
+				},
+				'table': {
+					width: '100%',
+					marginTop: '1em',
+					marginBottom: '1em',
+					borderCollapse: 'collapse',
+					'th, td': {
+						border: '1px solid #45475a',
+						padding: '0.75em',
+						textAlign: 'left'
+					},
+					'th': {
+						backgroundColor: '#313244',
+						color: '#cdd6f4'
+					},
+					'tr:nth-of-type(even)': {
+						backgroundColor: 'rgba(137, 180, 250, 0.05)'
+					}
+				},
+				'a': {
+					color: '#89b4fa',
+					textDecoration: 'none',
+					transition: 'color 0.2s',
+					'&:hover': {
+						color: '#b4befe',
+						textDecoration: 'underline'
+					}
+				}
+			}
+		}
+	});
 
 	return (
 		<VStack align="start" spacing={5} pb={5}>
@@ -332,9 +464,11 @@ export function ChatMessageBubble(props: {
 					{content}
 				</Heading>
 			) : (
-				<Box className="whitespace-pre-wrap" color="white">
-					{answerElements}
-				</Box>
+				<MessageContent width="100%" className="whitespace-pre-wrap" color="white">
+					<div className="markdown-content">
+						{answerElements}
+					</div>
+				</MessageContent>
 			)}
 
 			{props.message.role !== "user" &&
