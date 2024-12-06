@@ -74,7 +74,10 @@ const createAnswerElements = (
 	const matches = Array.from(content.matchAll(/\[\^?(\d+)\^?\]/g));
 	const elements: JSX.Element[] = [];
 	let prevIndex = 0;
-
+	DOMPurify.setConfig({
+		ALLOWED_TAGS: ['iframe', 'pre', 'code'],
+		ALLOWED_ATTR: ['src', 'width', 'height', 'frameborder', 'allowfullscreen', 'style', 'class']
+	});
 	matches.forEach((match) => {
 		const sourceNum = parseInt(match[1], 10);
 		const resolvedNum = sourceIndexMap.get(sourceNum) ?? 10;

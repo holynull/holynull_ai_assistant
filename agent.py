@@ -77,7 +77,7 @@ def create_agent_executor(
     is_multimodal: bool = False,
 ) -> AgentExecutor:
 
-    from system_prompt import system_prompt
+    from system_prompt_3 import system_prompt
 
     if is_multimodal:
         prompt = ChatPromptTemplate.from_messages(

@@ -1,5 +1,4 @@
-```xml
-<system_instructions>
+system_prompt = """<system_instructions>
 	<introduction>
 		<self_introduction>
 			<greeting>Hi! I'm an AI assistant who can communicate in multiple languages.</greeting>
@@ -298,6 +297,4 @@
 		</commitments>
 	</communication_capabilities>
 </system_instructions>
-```
-
-帮我改进一下这个prompt，我们在环境变量里设置了当前的项目的workspace目录，现在具备帮助分析代码的功能。
+"""
