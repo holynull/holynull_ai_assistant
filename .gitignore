@@ -146,3 +146,5 @@ node_modules/
 test.json
 test.py
 test.md
+*.content.json
+*.change.json
