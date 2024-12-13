@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 
 from typing import Set, Dict
 import pathspec
+import json
 
 if getattr(sys, "frozen", False):
     script_location = Path(sys.executable).parent.resolve()
@@ -415,9 +416,12 @@ def get_file_contents(file_path, context_lines=3):
     """
     from pathlib import Path
 
-    # Read all lines with their line endings
-    with open(file_path, "r", encoding="utf-8") as f:
-        raw_lines = list(f)
+    try:
+        # Read all lines with their line endings
+        with open(file_path, "r", encoding="utf-8") as f:
+            raw_lines = list(f)
+    except Exception as e:
+        return f"An error occurred while reading '{file_path}': {e}"
 
     # Check if file ends with newline
     has_newline = bool(raw_lines and raw_lines[-1].endswith("\n"))
@@ -467,208 +471,170 @@ def get_file_contents(file_path, context_lines=3):
         }
 
         lines_data.append(line_info)
-
-    return {
+    doc = {
         "file_path": str(Path(file_path)),
         "lines": lines_data,
         "has_newline": has_newline,
     }
+    with open(f"{file_path}.content.json", "w", encoding="utf-8") as f:
+        f.write(json.dumps(doc))
+    return doc
 
 
 @tool
-def generate_git_patch(file_path, changes, output_path, context_lines=3):
+def generate_git_patch(
+    workspace_dir,
+    file_path,
+    changes,
+    output_file_name,
+    output_path="patches",
+    context_lines=3,
+):
     """
-    Generate git patch file, which based on the file and change information.
+    Generate git patch file based on changes.
 
     Args:
-        file_path (str): Path to the file
-        changes (list): List of change information in the format:
-            [
-                {
-                    'line': int,       # Line number to modify
-                    'old': str,        # Original content
-                    'new': str,        # New content
-                    'type': str        # Change type: 'modify', 'add', or 'delete'
-                },
-                ...
-            ]
-        output_path (str): Path to write the patch file
-        context_lines (int): Number of context lines (default 3)
+        workspace_dir (str): Workspace directory path
+        file_path (str): File path relative to workspace_dir
+        changes (list): Changes to apply
+        output_file_name (str): Output patch file name
+        output_path (str): Output directory relative to workspace_dir
+        context_lines (int): Number of context lines
 
     Returns:
-        str: Path of the written patch file
+        str: Path to generated patch file
     """
     import os
     from hashlib import sha1
-    from datetime import datetime
+    import json
 
-    def format_range(start, count):
-        """Format patch range marker"""
-        if count == 1:
-            return str(start)
-        return f"{start},{count}"
+    # Validate paths
+    workspace_dir = os.path.abspath(workspace_dir)
+    full_file_path = os.path.join(workspace_dir, file_path)
+    full_output_path = os.path.join(workspace_dir, output_path, output_file_name)
 
-    def normalize_line_endings(text):
-        """Normalize line endings to LF"""
-        return text.replace("\r\n", "\n").replace("\r", "\n")
+    # Save changes for reference
+    os.makedirs(os.path.dirname(full_output_path), exist_ok=True)
+    with open(f"{full_output_path}.change.json", "w", encoding="utf-8") as f:
+        f.write(json.dumps(changes))
 
-    def split_into_lines(text):
-        """Split text into lines, preserving empty lines"""
-        return text.split("\n")
+    # Get file contents
+    if not os.path.exists(full_file_path):
+        return f"File not found: {full_file_path}"
+
+    # Create line lookup
+    file_data = get_file_contents.invoke(
+        {"file_path": full_file_path, "context_lines": context_lines}
+    )
+    line_contents = {
+        line["number"]: line["content"].rstrip("\n") for line in file_data["lines"]
+    }
 
     # Sort changes by line number
     changes = sorted(changes, key=lambda x: x["line"])
 
-    # Get file contents with context
-    file_data = get_file_contents.invoke(
-        {"file_path": file_path, "context_lines": context_lines}
-    )
-
     # Generate patch header
-    file_path = os.path.normpath(file_data["file_path"])
-    # Generate some dummy hashes for index line
+    relative_path = os.path.normpath(file_path)
     old_hash = sha1(b"old").hexdigest()[:7]
     new_hash = sha1(b"new").hexdigest()[:7]
+
     patch_lines = [
-        f"diff --git a/{file_path} b/{file_path}",
+        f"diff --git a/{relative_path} b/{relative_path}",
         f"index {old_hash}..{new_hash} 100644",
-        f"--- a/{file_path}",
-        f"+++ b/{file_path}",
+        f"--- a/{relative_path}",
+        f"+++ b/{relative_path}",
     ]
 
-    # Track line number adjustments
-    line_adjustment = 0
-    processed_changes = []
-
-    # Process and normalize changes
-    for change in changes:
-        if "old" in change:
-            change["old"] = normalize_line_endings(change["old"])
-            old_lines = split_into_lines(change["old"])
-        else:
-            old_lines = []
-
-        if "new" in change:
-            change["new"] = normalize_line_endings(change["new"])
-            new_lines = split_into_lines(change["new"])
-        else:
-            new_lines = []
-
-        adjusted_line = change["line"] + line_adjustment
-
-        # Update line adjustment for subsequent changes
-        if change["type"] == "add":
-            line_adjustment += len(new_lines)
-        elif change["type"] == "delete":
-            line_adjustment -= len(old_lines)
-        elif change["type"] == "modify":
-            line_adjustment += len(new_lines) - len(old_lines)
-
-        processed_changes.append(
-            {
-                "line": adjusted_line,
-                "old_lines": old_lines,
-                "new_lines": new_lines,
-                "type": change["type"],
-            }
-        )
-
-    # Group nearby changes into hunks
+    # Group changes into hunks
     hunks = []
     current_hunk = []
-    last_line = 0
 
-    for change in processed_changes:
-        if current_hunk and change["line"] > last_line + 2 * context_lines:
-            hunks.append(current_hunk)
+    for i, change in enumerate(changes):
+        if i == 0 or change["line"] - changes[i - 1]["line"] > 2 * context_lines:
+            if current_hunk:
+                hunks.append(current_hunk)
             current_hunk = []
-
         current_hunk.append(change)
-        last_line = change["line"]
 
     if current_hunk:
         hunks.append(current_hunk)
 
     # Process each hunk
     for hunk in hunks:
-        first_change = hunk[0]
-        last_change = hunk[-1]
+        hunk_start = max(1, hunk[0]["line"] - context_lines)
+        hunk_end = hunk[-1]["line"] + context_lines
 
-        # Calculate hunk range
-        hunk_start = max(1, first_change["line"] - context_lines)
-        hunk_end = last_change["line"] + context_lines
+        # Calculate hunk line counts
+        old_lines = 0
+        new_lines = 0
 
-        # Calculate line counts for hunk header
-        old_count = hunk_end - hunk_start + 1
-        new_count = old_count
-
-        # Adjust counts based on changes
+        # Track which lines are modified/added/deleted
+        modified_lines = set()
         for change in hunk:
-            if change["type"] == "add":
-                new_count += len(change["new_lines"])
+            if change["type"] == "modify":
+                old_count = len(change["old"].splitlines())
+                new_count = len(change["new"].splitlines())
+                old_lines += old_count
+                new_lines += new_count
+                for i in range(old_count):
+                    modified_lines.add(change["line"] + i)
+            elif change["type"] == "add":
+                new_lines += len(change["new"].splitlines())
             elif change["type"] == "delete":
-                old_count += len(change["old_lines"]) - 1
-                new_count -= 1
-            elif change["type"] == "modify":
-                new_count += len(change["new_lines"]) - len(change["old_lines"])
+                old_lines += 1
+                modified_lines.add(change["line"])
+
+        # Add context lines that aren't modified
+        for line_num in range(hunk_start, hunk_end + 1):
+            if line_num in line_contents and line_num not in modified_lines:
+                old_lines += 1
+                new_lines += 1
 
         # Generate hunk header
-        hunk_header = f"@@ -{format_range(hunk_start, old_count)} +{format_range(hunk_start, new_count)} @@"
+        hunk_header = f"@@ -{hunk_start},{old_lines} +{hunk_start},{new_lines} @@"
         hunk_lines = [hunk_header]
 
-        # Process each line in the hunk
+        # Generate hunk content
         current_line = hunk_start
         for change in hunk:
-            # Add context lines before change
+            # Add context before change
             while current_line < change["line"]:
-                context_line = next(
-                    (
-                        line
-                        for line in file_data["lines"]
-                        if line["number"] == current_line
-                    ),
-                    None,
-                )
-                if context_line:
-                    content = context_line["content"].rstrip("\n")
-                    hunk_lines.append(f" {content}")
+                if current_line in line_contents:
+                    hunk_lines.append(f" {line_contents[current_line]}")
                 current_line += 1
 
-            # Add the change
-            if change["type"] in ("delete", "modify"):
-                for line in change["old_lines"]:
+            if change["type"] == "modify":
+                # Remove old lines
+                for line in change["old"].splitlines():
                     hunk_lines.append(f"-{line}")
-
-            if change["type"] in ("add", "modify"):
-                for line in change["new_lines"]:
+                # Add new lines
+                for line in change["new"].splitlines():
                     hunk_lines.append(f"+{line}")
+                current_line += 1
+            elif change["type"] == "add":
+                # Add new lines
+                for line in change["new"].splitlines():
+                    hunk_lines.append(f"+{line}")
+            elif change["type"] == "delete":
+                # Remove old line
+                if current_line in line_contents:
+                    hunk_lines.append(f"-{line_contents[current_line]}")
+                current_line += 1
 
-            current_line += 1 if change["type"] != "add" else 0
-
-        # Add remaining context lines
-        context_end = min(hunk_end, len(file_data["lines"]))
-        while current_line <= context_end:
-            context_line = next(
-                (line for line in file_data["lines"] if line["number"] == current_line),
-                None,
-            )
-            if context_line:
-                content = context_line["content"].rstrip("\n")
-                hunk_lines.append(f" {content}")
+        # Add remaining context
+        while current_line <= hunk_end:
+            if current_line in line_contents:
+                hunk_lines.append(f" {line_contents[current_line]}")
             current_line += 1
 
         patch_lines.extend(hunk_lines)
-        # 删除了这行: patch_lines.append("")  # Empty line between hunks
 
-    # Create output directory if it doesn't exist
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-    # Write patch content to file
-    patch_content = "\n".join(patch_lines)
-    with open(output_path, "w", encoding="utf-8") as f:
+    # Write patch file
+    patch_content = "\n".join(patch_lines) + "\n"
+    with open(full_output_path, "w", encoding="utf-8") as f:
         f.write(patch_content)
 
-    return output_path
+    return full_output_path
 
 
 tools = [
@@ -677,7 +643,7 @@ tools = [
     # load_file,
     write_to_file,
     get_file_contents,
-    # generate_git_patch,
+    generate_git_patch,
     # apply_gpt_suggestions,
     # get_code_modification_suggestions,
 ]
