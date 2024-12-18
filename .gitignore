@@ -148,3 +148,4 @@ test.py
 test.md
 *.content.json
 *.change.json
+chromedriver-mac-x64/
