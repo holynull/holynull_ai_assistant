@@ -77,7 +77,7 @@ def create_agent_executor(
     is_multimodal: bool = False,
 ) -> AgentExecutor:
 
-    from system_prompt_3 import system_prompt
+    from system_prompt_4 import system_prompt
 
     if is_multimodal:
         prompt = ChatPromptTemplate.from_messages(
@@ -127,6 +127,8 @@ def create_agent_executor(
         prompts=prompt,
         tools=tools,
         memory=memory,
+        max_iterations=100,  # 设置最大迭代次数
+        max_execution_time=600,  # 设置最大执行时间（秒）
     )
     return executor
 
@@ -179,8 +181,11 @@ llm_agent = ChatAnthropic(
     pplx_sonar_medium_chat=ChatPerplexity(
         model="sonar-medium-chat", temperature=0.9, verbose=True, streaming=True
     ),
-	pplx_sonar_large_chat=ChatPerplexity(
-        model="llama-3.1-sonar-large-128k-online", temperature=0.9, verbose=True, streaming=True
+    pplx_sonar_large_chat=ChatPerplexity(
+        model="llama-3.1-sonar-large-128k-online",
+        temperature=0.9,
+        verbose=True,
+        streaming=True,
     ),
     mistral_large=ChatMistralAI(
         model="mistral-large-latest", temperature=0.1, verbose=True, streaming=True

@@ -1,3 +1,5 @@
+from hashlib import sha1
+import re
 from urllib.parse import urlparse
 from langchain.agents import tool
 from langchain_openai import ChatOpenAI
@@ -358,57 +360,170 @@ def list_workspace_directory(workspace_dir: str) -> str:
 
 
 @tool
-def write_to_file(file_path, file_name, content, append=False):
+def create_empty_file(file_path: str) -> str:
+    """
+    Create a new empty file in workspace, if it doesn't exist.
+
+    Args:
+        file_path (str): The path where the empty file should be created.
+            Can be either absolute or relative path.
+
+    Returns:
+        str: A string indicating the operation result:
+            - "file_exists": If the file already exists
+            - "success": If the file was created successfully
+            - "error: [error message]": If the creation failed, including the specific error message
+    """
+    try:
+        # Check if file already exists
+        if os.path.exists(file_path):
+            return f"Error: {file_path} file exists."
+        workspace = get_workspace_dir.invoke({})
+        if not is_path_under_workspace(file_path, workspace):
+            return f"Error:  Cannot create files outside of workspace. Workspace is {workspace}"
+
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        # Create empty file
+        with open(file_path, "w") as f:
+            pass
+        return f"Create file success. The path is {file_path}"
+
+    except OSError as e:
+        return f"error: {str(e)}"
+
+
+@tool
+def write_to_file(file_path, content, append=False):
     """
     Write normal text content to a specified file.
 
     Parameters:
-    file_path (str): The path of the file to write to
-    file_name (str): The name of the file to write to
-    content (str): The content to write
-    append (bool, optional): If True, append to the end of the file; if False, overwrite the file. Default is False.
+    -----------
+    file_path : str
+        The path of the file to write to. Must be a valid file path.
+    content : str
+        The content to write to the file.
+    append : bool, optional
+        If True, append to the end of the file if it exists;
+        if False, only write to new files (default).
 
     Returns:
-    str: Returns a message describing the operation result and suggestions for next steps
+    --------
+    str
+        A message describing the operation result.
     """
+    # 验证输入参数
+    if not isinstance(file_path, str) or not file_path:
+        return "file_path must be a non-empty string"
+    if not isinstance(content, str):
+        return "content must be a string"
 
     try:
-        # Determine the write mode
-        mode = "a" if append else "w"
+        # 确保使用绝对路径
+        if not os.path.isabs(file_path):
+            file_path = os.path.abspath(file_path)
 
-        # Construct full file path using os.path.join
-        full_path = os.path.join(file_path, file_name)
+        # 检查文件是否存在
+        file_exists = os.path.exists(file_path)
+        if file_exists and not append:
+            return f"Error: Cannot write to existing file '{file_path}'. Use append=True to append content."
 
         # 确保目录存在
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
-        # Open the file and write the content
-        with open(full_path, mode, encoding="utf-8") as file:
+        # 确定写入模式并写入内容
+        mode = "a" if append else "w"
+        with open(file_path, mode, encoding="utf-8") as file:
             file.write(content)
 
         # 准备返回信息
         operation_type = "appended to" if append else "written to"
-        message = f"Successfully {operation_type} file '{full_path}'"
+        message = f"Successfully {operation_type} file '{file_path}'"
 
-        # 如果还有剩余内容未写入，添加建议信息
-        message += f"\nPlease check if there is any remaining content that needs to be written to the file. If so, please call this function again with the remaining content and append=True"
-        message += f"\nThe current file path is: {full_path}"
+        # 只在追加模式下提供继续写入的建议
+        if append:
+            message += "\nYou can continue to append more content using append=True"
+
+        message += f"\nFile path: {file_path}"
 
         return message
 
     except IOError as e:
-        return f"An IOError occurred while writing to '{full_path}': {e}"
+        return f"Error writing to file: {str(e)}"
     except Exception as e:
-        return f"An error occurred while writing to '{full_path}': {e}"
+        return f"Unexpected error: {str(e)}"
 
 
 @tool
-def get_file_contents(file_path, context_lines=3):
+def get_file_contents(file_path):
     """
     Read file and return content data with position information (optimized for git patch)
 
     Args:
-        file_path (str): Path to the file
+        file_path (str): the full path to the file
+
+    Returns:
+        dict: Dictionary containing file information
+    """
+    from pathlib import Path
+
+    workspace = get_workspace_dir.invoke({})
+    if not is_path_under_workspace(file_path, workspace):
+        return (
+            f"Error:  Cannot read files outside of workspace. Workspace is {workspace}"
+        )
+    try:
+        # Read all lines with their line endings
+        with open(file_path, "r", encoding="utf-8") as f:
+            raw_lines = list(f)
+    except Exception as e:
+        return f"An error occurred while reading '{file_path}': {e}"
+
+    # Check if file ends with newline
+    has_newline = bool(raw_lines and raw_lines[-1].endswith("\n"))
+
+    # Store line endings
+    line_endings = []
+    for line in raw_lines:
+        if line.endswith("\r\n"):
+            line_endings.append("\r\n")
+        elif line.endswith("\n"):
+            line_endings.append("\n")
+        else:
+            line_endings.append("")
+
+    # Strip line endings for content
+    raw_lines = [line.rstrip("\r\n") for line in raw_lines]
+
+    # Process line information
+    lines_data = []
+
+    for idx, content in enumerate(raw_lines, start=1):
+
+        # Build line information
+        line_info = {
+            "number": idx,
+            "content": content,
+            "ending": line_endings[idx - 1],
+        }
+
+        lines_data.append(line_info)
+    doc = {
+        "file_path": str(Path(file_path)),
+        "lines": lines_data,
+        "has_newline": has_newline,
+    }
+    with open(f"{file_path}.content.json", "w", encoding="utf-8") as f:
+        f.write(json.dumps(doc))
+    return doc
+
+
+def get_file_contents_ctx(file_path, context_lines=3):
+    """
+    Read file and return content data with position information (optimized for git patch)
+
+    Args:
+        file_path (str): the full path to the file
         context_lines (int): Number of context lines (default 3)
 
     Returns:
@@ -416,12 +531,14 @@ def get_file_contents(file_path, context_lines=3):
     """
     from pathlib import Path
 
-    try:
-        # Read all lines with their line endings
-        with open(file_path, "r", encoding="utf-8") as f:
-            raw_lines = list(f)
-    except Exception as e:
-        return f"An error occurred while reading '{file_path}': {e}"
+    workspace = get_workspace_dir.invoke({})
+    if not is_path_under_workspace(file_path, workspace):
+        raise Exception(
+            f"Error:  Cannot read files outside of workspace. Workspace is {workspace}"
+        )
+    # Read all lines with their line endings
+    with open(file_path, "r", encoding="utf-8") as f:
+        raw_lines = list(f)
 
     # Check if file ends with newline
     has_newline = bool(raw_lines and raw_lines[-1].endswith("\n"))
@@ -483,22 +600,28 @@ def get_file_contents(file_path, context_lines=3):
 
 @tool
 def generate_git_patch(
-    workspace_dir,
-    file_path,
-    changes,
-    output_file_name,
-    output_path="patches",
-    context_lines=3,
+    file_path: str,
+    patch_file_name: str,
+    changes: list[dict],
+    context_lines: int = 3,
 ):
     """
     Generate git patch file based on changes.
 
     Args:
-        workspace_dir (str): Workspace directory path
-        file_path (str): File path relative to workspace_dir
-        changes (list): Changes to apply
-        output_file_name (str): Output patch file name
-        output_path (str): Output directory relative to workspace_dir
+        file_path (str): the full file path where the file data from
+        patch_file_name (str): file name of patch file
+        changes (list): List of change information in the format:
+            [
+                {
+                    'line': int,       # Line number to modify
+                    'old': str,        # Original content
+                    'new': str,        # New content
+                    'type': str        # Change type: 'modify', 'add', or 'delete'
+                },
+                ...
+            ]
+        output_path (str): Output file full path
         context_lines (int): Number of context lines
 
     Returns:
@@ -508,33 +631,27 @@ def generate_git_patch(
     from hashlib import sha1
     import json
 
-    # Validate paths
-    workspace_dir = os.path.abspath(workspace_dir)
-    full_file_path = os.path.join(workspace_dir, file_path)
-    full_output_path = os.path.join(workspace_dir, output_path, output_file_name)
-
+    workspe_dir = get_workspace_dir.invoke({})
+    if not is_path_under_workspace(file_path, workspe_dir):
+        return f"Error:  Cannot create files outside of workspace. Workspace is {workspe_dir}"
+    output_path = workspe_dir + "/patches/" + patch_file_name
     # Save changes for reference
-    os.makedirs(os.path.dirname(full_output_path), exist_ok=True)
-    with open(f"{full_output_path}.change.json", "w", encoding="utf-8") as f:
+    os.makedirs(os.path.dirname(workspe_dir + "/patches/"), exist_ok=True)
+    with open(f"{output_path}.change.json", "w", encoding="utf-8") as f:
         f.write(json.dumps(changes))
 
-    # Get file contents
-    if not os.path.exists(full_file_path):
-        return f"File not found: {full_file_path}"
-
     # Create line lookup
-    file_data = get_file_contents.invoke(
-        {"file_path": full_file_path, "context_lines": context_lines}
-    )
+    file_data = get_file_contents_ctx(file_path, context_lines)
     line_contents = {
         line["number"]: line["content"].rstrip("\n") for line in file_data["lines"]
     }
+    line_contents_ctx = {line["number"]: line for line in file_data["lines"]}
 
     # Sort changes by line number
     changes = sorted(changes, key=lambda x: x["line"])
 
     # Generate patch header
-    relative_path = os.path.normpath(file_path)
+    relative_path = os.path.relpath(file_path, workspe_dir)
     old_hash = sha1(b"old").hexdigest()[:7]
     new_hash = sha1(b"new").hexdigest()[:7]
 
@@ -631,19 +748,233 @@ def generate_git_patch(
 
     # Write patch file
     patch_content = "\n".join(patch_lines) + "\n"
-    with open(full_output_path, "w", encoding="utf-8") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(patch_content)
+    # Check patch in workspace directory
+    current_dir = os.getcwd()
+    try:
+        os.chdir(workspe_dir)
+        git = Git(workspe_dir)
+        git.apply("--check", output_path)
 
-    return full_output_path
+    except Exception as e:
+
+        def extract_line_number(error_text):
+            try:
+                # 匹配任意文件名后跟着冒号和数字的模式
+                pattern = r"error: patch failed: .*?:(\d+)"
+                match = re.search(pattern, error_text)
+                if match:
+                    return int(match.group(1))
+                return None
+            except Exception:
+                return None
+
+        err_line_number = extract_line_number(f"{e}")
+        err_line_number = (
+            err_line_number + context_lines if err_line_number is not None else None
+        )
+        if err_line_number is not None:
+            if err_line_number not in line_contents_ctx:
+                err_line_number = err_line_number - context_lines
+            source_data = line_contents_ctx[err_line_number]
+            base_name = os.path.basename(file_path)
+            return f"Check the patch file ({output_path}) failed.\n{e}\n{base_name} in line:{err_line_number} content is:\n{json.dumps(source_data)}"
+        else:
+            return f"Check the patch file ({output_path}) failed.\n{e}"
+    finally:
+        os.chdir(current_dir)
+    return f"Patch file:{output_path}"
+
+
+import shutil
+import tempfile
+from contextlib import contextmanager
+from git import Git, Repo
+from git.exc import GitCommandError
+from pathlib import Path
+
+
+@contextmanager
+def temporary_git_repo(workspace: str = None):
+    """Create a temporary git repository and clean it up when done.
+
+    Yields:
+        tuple: (Repo object, temporary directory path)
+    """
+    temp_dir = tempfile.mkdtemp(dir=workspace)
+    repo = Repo.init(temp_dir)
+    try:
+        yield repo, temp_dir
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def validate_paths(*paths):
+    """Validate that all provided paths exist.
+
+    Args:
+        *paths: Variable number of paths to validate
+
+    Raises:
+        FileNotFoundError: If any path doesn't exist
+    """
+    for path in paths:
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Path not found: {path}")
+
+
+def is_path_under_workspace(file_path, workspace_path):
+    # 获取两个路径的绝对路径
+    abs_file = os.path.abspath(file_path)
+    abs_workspace = os.path.abspath(workspace_path)
+
+    # 使用 os.path.commonpath 比较
+    try:
+        common_path = os.path.commonpath([abs_file, abs_workspace])
+        return common_path == abs_workspace
+    except ValueError:  # 当路径在不同驱动器时会抛出异常
+        return False
+
+
+@tool
+def apply_patch_with_git(
+    patch_file: str,
+    source_file: str,
+    dry_run: bool = False,
+) -> dict:
+    """Apply a git patch to a source file and save the result to a new file using git's patch application mechanism. (Original file will remain unchanged)
+
+    Args:
+        patch_file (str): full path to the patch file to apply
+        source_file (str): full path to the source file to patch
+        dry_run (bool): If True, only test if patch can be applied without modifying files
+
+    Returns:
+        dict: A dictionary containing the patch application results with the following keys:
+            - success (bool): True if patch was applied successfully
+            - message (str): Descriptive message about the operation result
+            - conflicts (bool): True if there were conflicts during patch application
+            - dry_run (bool): True if this was a dry run operation
+            - target_file (str): Patch can be successfully applied. A new file will be generated at target_file (Original file will remain unchanged)
+    """
+    workspace_dir = get_workspace_dir.invoke({})
+    if not is_path_under_workspace(patch_file, workspace_dir):
+        return f"Error:  Cannot create files outside of workspace. Workspace is {workspace_dir}"
+    if not is_path_under_workspace(source_file, workspace_dir):
+        return f"Error:  Cannot create files outside of workspace. Workspace is {workspace_dir}"
+
+    def _prepare_paths():
+        """Prepare and validate all file paths."""
+        nonlocal patch_file, source_file, target_file
+        validate_paths(patch_file, source_file)
+        patch_file = os.path.abspath(patch_file)
+        source_file = os.path.abspath(source_file)
+
+        # Calculate target file path
+        with open(patch_file, "r", encoding="utf-8") as f:
+            patch_content = f.read()
+        patch_hash = sha1(patch_content.encode("utf-8")).hexdigest()[:8]
+
+        file_path_obj = Path(source_file)
+        target_file = (
+            file_path_obj.parent
+            / f"{file_path_obj.stem}_{patch_hash}{file_path_obj.suffix}.patched"
+        )
+        target_file = os.path.abspath(target_file)
+        os.makedirs(os.path.dirname(target_file), exist_ok=True)
+        return patch_content
+
+    def _apply_patch_dry_run(repo, patch_file):
+        """Execute dry run patch application."""
+        repo.git.apply("--check", patch_file)
+        return {
+            "success": True,
+            "message": f"Patch can be successfully applied. A new file will be generated at: {target_file} (Original file will remain unchanged)",
+            "conflicts": False,
+            "dry_run": True,
+            "target_file": target_file,
+        }
+
+    def _apply_patch_real(repo, temp_file):
+        """Execute actual patch application."""
+        try:
+            repo.git.apply(patch_file)
+            conflicts = False
+            message = f"Patch applied successfully. A new file containing the patched result has been generated at: {target_file} (Original file remains unchanged)"
+
+        except GitCommandError:
+            repo.git.apply("--3way", patch_file)
+            conflicts = True
+            message = f"Patch applied with 3-way merge. A new file containing the patched result has been generated at: {target_file} (Original file remains unchanged)"
+
+        shutil.copy2(temp_file, target_file)
+        return {
+            "success": True,
+            "message": message,
+            "conflicts": conflicts,
+            "dry_run": False,
+            "target_file": target_file,
+        }
+
+    try:
+        # Initialize result
+        target_file = None
+
+        # Prepare paths and read patch content
+        _prepare_paths()
+
+        # Execute in temporary git repository
+        with temporary_git_repo(workspace=workspace_dir) as (repo, temp_dir):
+            # Setup initial state
+            temp_file = os.path.join(temp_dir, os.path.basename(source_file))
+            shutil.copy2(source_file, temp_file)
+            repo.index.add([temp_file])
+            repo.index.commit("Initial commit")
+
+            # Apply patch
+            if dry_run:
+                result = _apply_patch_dry_run(repo, patch_file)
+            else:
+                if os.path.getsize(source_file) == 0:
+                    current_dir = os.getcwd()
+                    try:
+                        os.chdir(workspace_dir)
+                        git = Git(workspace_dir)
+                        git.apply(patch_file)
+                    except Exception as e:
+                        return {
+                            "success": False,
+                            "message": f"Patch failed. {e}",
+                        }
+                    finally:
+                        os.chdir(current_dir)
+                    return {
+                        "success": True,
+                        "message": f"Patch applied successfully.",
+                    }
+                else:
+                    result = _apply_patch_real(repo, temp_file)
+
+        return result
+
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Failed to apply patch: {str(e)}",
+            "dry_run": False,
+        }
 
 
 tools = [
     get_workspace_dir,
     list_workspace_directory,
     # load_file,
-    write_to_file,
+    # write_to_file,
+    create_empty_file,
     get_file_contents,
     generate_git_patch,
+    apply_patch_with_git,
     # apply_gpt_suggestions,
     # get_code_modification_suggestions,
 ]

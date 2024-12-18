@@ -287,7 +287,7 @@ system_prompt = """<system_instructions>
 						<principle>Multi-line modifications must be split into individual changes</principle>
 						<principle>Maintain atomic granularity in change tracking</principle>
 						<principle>Line numbers must start counting from 1 (one-based indexing)</principle>
-						<principle>Each source code file must generate exactly one patch file, consolidating all modifications</principle>
+						<principle>Changes should be logically grouped into appropriate patches</principle>
 					</core_principles>
 
 					<change_guidelines>
@@ -405,19 +405,28 @@ system_prompt = """<system_instructions>
 					<execution_workflow>
 						<workflow>
 							<stage>
-								<principle>All modifications to a single file must be consolidated into one patch file</principle>
-								<principle>Multiple separate patches for the same file are not allowed</principle>
+								<principle>Multiple patches may be generated based on logical separation of changes</principle>
+								<principle>Each patch should be self-contained and focused</principle>
+							</stage>
+							<stage>
+								<name>Multi-Patch Planning Phase</name>
+								<tasks>
+									<task>Determine optimal patch division strategy</task>
+									<task>Plan patch dependencies and order</task>
+									<task>Document inter-patch relationships</task>
+									<task>Define conflict resolution approach</task>
+								</tasks>
 							</stage>
 							<stage>
 								<name>Modification Analysis Phase</name>
 								<tasks>
 									<task>Identify modification locations</task>
 									<task>Plan specific modification content</task>
+									<task>Group related modifications into patches</task>
 									<task>Document modification reasons and purposes</task>
 									<task>Assess modification impact scope</task>
 								</tasks>
 							</stage>
-
 							<stage>
 								<name>Modification Verification Phase</name>
 								<tasks>
@@ -425,25 +434,29 @@ system_prompt = """<system_instructions>
 									<task>Verify necessity of modifications</task>
 									<task>Confirm completeness of modifications</task>
 									<task>Check for omissions or redundancies</task>
+									<task>Validate patch dependencies</task>
+									<task>Verify patch conflict resolution</task>
 								</tasks>
 							</stage>
-
 							<stage>
 								<name>Patch Generation Phase</name>
 								<tasks>
-									<task>Generate patch based on confirmed modifications</task>
+									<task>Generate individual patches based on grouping</task>
 									<task>Verify patch correctness</task>
 									<task>Ensure patch format compliance</task>
+									<task>Document patch application order</task>
+									<task>Validate multi-patch consistency</task>
 								</tasks>
 							</stage>
 						</workflow>
-
 						<quality_control>
-							<check>Verify only one patch file is generated per source file</check>
+							<check>Are patches properly organized and named</check>
 							<check>Are modifications complete and necessary</check>
 							<check>Do modifications comply with code standards</check>
-							<check>Is patch format correct</check>
+							<check>Are patch dependencies clearly documented</check>
+							<check>Is conflict resolution strategy appropriate</check>
 							<check>Is documentation complete and clear</check>
+							<check>Is patch application order well-defined</check>
 						</quality_control>
 					</execution_workflow>
 				</change_control_methodology>
@@ -499,22 +512,51 @@ system_prompt = """<system_instructions>
 				</syntax_analysis>
 				<patch_management>
 					<core_principles>
-						<principle>Generate exactly one patch file per source code file</principle>
-						<principle>Consolidate all modifications to a file into a single comprehensive patch</principle>
+						<principle>Support generation of multiple patch files when needed</principle>
+						<principle>Each patch should have clear scope and purpose</principle>
 						<principle>Maintain clear traceability between source files and their corresponding patches</principle>
+						<principle>Consider patch dependencies and application order</principle>
 					</core_principles>
 					<guidelines>
-						<guideline>Include all related changes to a file in one patch</guideline>
-						<guideline>Use clear naming conventions to link patches to source files</guideline>
-						<guideline>Ensure patch files are self-contained and complete</guideline>
+						<guideline>Ensure logical completeness of each individual patch</guideline>
+						<guideline>Maintain clear separation of concerns between patches</guideline>
+						<guideline>Follow established patch organization conventions</guideline>
 					</guidelines>
 					<validation_steps>
-						<step>Verify no duplicate patches exist for the same file</step>
-						<step>Confirm all file modifications are included in the patch</step>
-						<step>Check patch file naming follows conventions</step>
-						<step>Validate patch completeness and correctness</step>
+						<step>Verify patch completeness and correctness individually</step>
+						<step>Validate inter-patch dependencies</step>
+						<step>Check for potential conflicts between patches</step>
+						<step>Confirm proper patch naming and organization</step>
+						<step>Verify application order documentation</step>
+						<step>Test combined effect of all patches</step>
 					</validation_steps>
 				</patch_management>
+				<patch_organization>
+					<naming_conventions>
+						<guideline>Use descriptive names reflecting patch purpose</guideline>
+						<guideline>Include sequence indicators for order-dependent patches</guideline>
+						<guideline>Maintain clear connection to affected source files</guideline>
+					</naming_conventions>
+
+					<dependency_management>
+						<principle>Explicitly document patch dependencies</principle>
+						<principle>Define clear application order when necessary</principle>
+						<principle>Handle circular dependencies</principle>
+					</dependency_management>
+
+					<conflict_resolution>
+						<principle>Detect potential conflicts between patches</principle>
+						<principle>Provide resolution strategies for conflicts</principle>
+						<principle>Maintain patch integrity during resolution</principle>
+					</conflict_resolution>
+					<grouping_strategy>
+						<principle>Group related changes based on logical functionality</principle>
+						<principle>Consider impact scope when dividing changes</principle>
+						<principle>Balance granularity with maintainability</principle>
+						<guideline>Keep patches focused on specific concerns</guideline>
+						<guideline>Avoid mixing unrelated changes in same patch</guideline>
+					</grouping_strategy>
+				</patch_organization>
 			</code_analysis_methodology>
 			<tool_usage_methodology>
 				<parameter_validation>

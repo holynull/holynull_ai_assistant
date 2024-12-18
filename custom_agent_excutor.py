@@ -93,6 +93,8 @@ class CustomToolCallingAgentExecutor(Runnable):
         prompts: ChatPromptTemplate,
         tools: List[BaseTool],
         memory: BaseMemory,
+        max_iterations: int,  # 设置最大迭代次数
+        max_execution_time: int,  # 设置最大执行时间（秒）
         **kwargs,
     ):
         """Initialize the runnable."""
@@ -101,6 +103,8 @@ class CustomToolCallingAgentExecutor(Runnable):
         self.tools = tools
         self.prompts = prompts
         self.memory = memory
+        self.max_execution_time = max_execution_time
+        self.max_iterationsm = max_iterations
 
     def invoke(self, input: Input, config: Optional[RunnableConfig] = None) -> Output:
         if config:
@@ -132,6 +136,8 @@ class CustomToolCallingAgentExecutor(Runnable):
             tools=self.tools,
             verbose=True,
             handle_parsing_errors=True,
+            max_iterations=self.max_iterationsm,  # 设置最大迭代次数
+            max_execution_time=self.max_execution_time,  # 设置最大执行时间（秒）
         ).with_config({"run_name": "Eddie's Assistant Agent"})
         return executor.invoke(input=input, config=config)
 
@@ -183,6 +189,8 @@ class CustomToolCallingAgentExecutor(Runnable):
             tools=self.tools,
             verbose=True,
             handle_parsing_errors=True,
+            max_iterations=self.max_iterationsm,  # 设置最大迭代次数
+            max_execution_time=self.max_execution_time,  # 设置最大执行时间（秒）
         ).with_config({"run_name": "Eddie's Assistant Agent"})
         async for output in executor.astream_events(
             input,

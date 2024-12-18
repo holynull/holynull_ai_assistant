@@ -261,7 +261,7 @@ The `tbs` parameter of the Google Search API is a very useful tool that allows y
 Return Example:
 ```json
 {{
-	"terms":"Hello World Keywords",
+    "terms":"Hello World Keywords",
     "tbs":"qdr:w"
 }}
 ```
@@ -324,7 +324,7 @@ Extract the keywords required for search from the question.
 Return Example:
 ```json
 {{
-	"terms":"Hello World Keywords"
+    "terms":"Hello World Keywords"
 }}
 ```
 
@@ -716,43 +716,46 @@ def getHTMLFromURL(url: str) -> str:
     # chrome_options = Options()
     # 添加无头模式参数
     # chrome_options.add_argument("--headless")
-    browser = webdriver.Chrome(service=service, options=chrome_options)
+    try:
+        browser = webdriver.Chrome(service=service, options=chrome_options)
 
-    # 获取网页内容
-    browser.get(url=url)
-    html_content = browser.page_source
-    soup = BeautifulSoup(html_content, "html.parser")
-    # if response.status_code == 200:
-    # soup = BeautifulSoup(response.text, "html.parser")
-    body = soup.find("body")
-    for tag in body.find_all(
-        [
-            "link",
-            "script",
-            "style",
-            "button",
-            "input",
-            "meta",
-            "iframe",
-            "img",
-            "noscript",
-            "svg",
-        ]
-    ):
-        tag.decompose()
-    for tag in body.findAll(True):
-        tag.attrs = {
-            key: value
-            for key, value in tag.attrs.items()
-            if key not in ["class", "style"]
-        }
+        # 获取网页内容
+        browser.get(url=url)
+        html_content = browser.page_source
+        soup = BeautifulSoup(html_content, "html.parser")
+        # if response.status_code == 200:
+        # soup = BeautifulSoup(response.text, "html.parser")
+        body = soup.find("body")
+        for tag in body.find_all(
+            [
+                "link",
+                "script",
+                "style",
+                "button",
+                "input",
+                "meta",
+                "iframe",
+                "img",
+                "noscript",
+                "svg",
+            ]
+        ):
+            tag.decompose()
+        for tag in body.findAll(True):
+            tag.attrs = {
+                key: value
+                for key, value in tag.attrs.items()
+                if key not in ["class", "style"]
+            }
 
-    # 可选：清理空白行
-    clean_html = re.sub(r"(?m)^[\t ]+$", "", str(body))
-    browser.quit()
-    return clean_html
-    # else:
-    #     return f"Failed to retrieve the webpage from {url}. status: {response.status_code}"
+        # 可选：清理空白行
+        clean_html = re.sub(r"(?m)^[\t ]+$", "", str(body))
+        browser.quit()
+        return clean_html
+        # else:
+        #     return f"Failed to retrieve the webpage from {url}. status: {response.status_code}"
+    except Exception as e:
+        return f"{e}"
 
 
 @tool
