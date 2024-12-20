@@ -292,7 +292,15 @@ export function ChatWindow(props: { conversationId: string }) {
 		renderer.listitem = (text) => {
 			return `<li style="${markdownStyles.listItem}">${text}</li>`;
 		};
-
+		renderer.html = (html) => {
+			console.log(html)
+			// 这里可以添加一些验证逻辑，例如只允许特定的 iframe
+			// if (html.startsWith('<iframe') && html.includes('musse.ai')) {
+			// return html;
+			// }
+			// 对于其他 HTML，你可以选择返回空字符串、原始 HTML 或经过转义的 HTML
+			return html; // 或者 return html; 或者 return marked.escapeHtml(html);
+		};
 		// 设置 marked 选项
 		marked.setOptions({
 			renderer,
@@ -327,13 +335,13 @@ export function ChatWindow(props: { conversationId: string }) {
 				},
 			});
 			const llmDisplayName = llm ?? "openai_gpt_3_5_turbo";
-			const streams = await remoteChain.stream(
+			let streams = await remoteChain.stream(
 				{
 					input: messageValue,
 					// chat_history: chatHistory,
 					chat_history: [],
 					image_urls: currentImages,
-					pdf_files: currentPDFs
+					pdf_files: currentPDFs,
 				},
 				{
 					configurable: {
@@ -450,43 +458,50 @@ export function ChatWindow(props: { conversationId: string }) {
 								}
 							}
 							if ("name" in _chunk && (_chunk.name == "searchWebPageToAnswer" || _chunk.name == "searchNewsToAnswer")) {
-
 								if ("data" in _chunk) {
 									var data = _chunk.data as object;
 									if ("output" in data) {
-										var output = eval('(' + data.output + ')');
-										sources = output.map((doc: Record<string, any>) => ({
-											url: doc.link,
-											title: doc.title,
-											img_src: doc.imageUrl,
-										}));
-									}
-								}
-							}
-							if ("name" in _chunk && (_chunk.name == "generate_git_patch")) {
-
-								if ("data" in _chunk) {
-									var data = _chunk.data as object;
-									if ("output" in data) {
-										const results = data.output as any;
-										if (results.success) {
-											accumulatedMessage += "\n" + "`" + results.message + "`\n";
+										var output = eval('(' + data.output + ')') as object;
+										if ("search_result" in output) {
+											var search_result = output.search_result as Array<any>
+											currentSources = search_result.map((doc: Record<string, any>) => ({
+												url: doc.link,
+												title: doc.title,
+												img_src: doc.imageUrl,
+											}));
 										}
 									}
 								}
 							}
-							if ("name" in _chunk && (_chunk.name == "apply_patch_with_git")) {
-
+							if ("name" in _chunk && (_chunk.name == "gen_images" || _chunk.name == "generate_social_media_image")) {
 								if ("data" in _chunk) {
 									var data = _chunk.data as object;
 									if ("output" in data) {
-										const results = data.output as any;
-										if (results.success) {
-											accumulatedMessage += "\n" + "`" + results.target_file + "`\n";
-										}
+										// 处理生成的图片数据
+										const generatedImages = data.output as string[];
+										const imageMarkdowns = generatedImages.map(url => `${url}\n`);
+										accumulatedMessage += imageMarkdowns.join('');
 									}
 								}
 							}
+							if ("name" in _chunk && (_chunk.name == "get_balances_of_address"
+								|| _chunk.name == "get_token_balance_daily_of_address"
+								|| _chunk.name == "get_addres_funds_movements_of")) {
+								if ("data" in _chunk) {
+									var data = _chunk.data as object;
+									if ("output" in data) {
+										// 处理生成的图片数据
+										const results = data.output as string[];
+										const func_return = results.map(r => `${r}\n`);
+										let return_str = ""
+										if (func_return.length > 1) {
+											return_str = func_return[1]
+										}
+										accumulatedMessage += return_str;
+									}
+								}
+							}
+
 							sources = [...sources ? sources : [], ...currentSources];
 							setMessages((prevMessages) => {
 								let newMessages = [...prevMessages];
@@ -579,7 +594,7 @@ export function ChatWindow(props: { conversationId: string }) {
 		<div className="min-h-screen w-full bg-[#131318]">
 			{showPasteHint && <GlobalPasteHint onClose={handleClosePasteHint} />}
 			<div className="flex flex-col min-h-screen w-full bg-[#131318] overflow-x-hidden">
-				<div className="flex flex-col items-center p-4 md:p-8 grow w-full max-w-[1200px] mx-auto">
+				<div className="flex flex-col items-center p-4 md:p-8 pb-16 grow w-full max-w-[1200px] mx-auto">
 					<Flex
 						direction={"column"}
 						alignItems={"center"}
@@ -600,7 +615,7 @@ export function ChatWindow(props: { conversationId: string }) {
 							color={"white"}
 							textAlign="center"
 						>
-							🍺 Eddie's Assistant 🥩
+							Ξ Musse AI Assistant 💼
 						</Heading>
 						<Heading
 							fontSize="xl"
@@ -643,7 +658,7 @@ export function ChatWindow(props: { conversationId: string }) {
 						className="flex flex-col-reverse w-full mb-2 overflow-y-auto overflow-x-hidden scroll-smooth bg-[#131318]"
 						ref={messageContainerRef}
 						style={{
-							maxHeight: "calc(100vh - 350px)",
+							maxHeight: "calc(100vh - 420px)",
 							minHeight: "200px",
 							scrollBehavior: "smooth",
 							flex: 1,

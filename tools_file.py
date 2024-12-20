@@ -602,7 +602,7 @@ def get_file_contents_ctx(file_path, context_lines=3):
 def generate_git_patch(
     file_path: str,
     patch_file_name: str,
-    changes: list[dict],
+    changes=None,
     context_lines: int = 3,
 ):
     """
@@ -627,9 +627,28 @@ def generate_git_patch(
     Returns:
         str: Path to generated patch file
     """
+    result = {"success": bool, "message": str}
+    if changes is None or not isinstance(changes, list):
+        return """Error: `changes` is required. `changes` list of change information in the format:
+            [
+                {
+                    'line': int,       # Line number to modify
+                    'old': str,        # Original content
+                    'new': str,        # New content
+                    'type': str        # Change type: 'modify', 'add', or 'delete'
+                },
+                ...
+            ]"""
     import os
     from hashlib import sha1
     import json
+
+    try:
+        # Read all lines with their line endings
+        with open(file_path, "r", encoding="utf-8") as f:
+            raw_lines = list(f)
+    except Exception as e:
+        return f"An error occurred while reading '{file_path}': {e}"
 
     workspe_dir = get_workspace_dir.invoke({})
     if not is_path_under_workspace(file_path, workspe_dir):
@@ -637,8 +656,8 @@ def generate_git_patch(
     output_path = workspe_dir + "/patches/" + patch_file_name
     # Save changes for reference
     os.makedirs(os.path.dirname(workspe_dir + "/patches/"), exist_ok=True)
-    with open(f"{output_path}.change.json", "w", encoding="utf-8") as f:
-        f.write(json.dumps(changes))
+    # with open(f"{output_path}.change.json", "w", encoding="utf-8") as f:
+    #     f.write(json.dumps(changes))
 
     # Create line lookup
     file_data = get_file_contents_ctx(file_path, context_lines)
@@ -779,12 +798,24 @@ def generate_git_patch(
                 err_line_number = err_line_number - context_lines
             source_data = line_contents_ctx[err_line_number]
             base_name = os.path.basename(file_path)
-            return f"Check the patch file ({output_path}) failed.\n{e}\n{base_name} in line:{err_line_number} content is:\n{json.dumps(source_data)}"
+            result = {
+                "success": False,
+                "message": f"Check the patch file ({output_path}) failed.\n{e}\n{base_name} in line:{err_line_number} content is:\n{json.dumps(source_data)}",
+            }
+            return result
         else:
-            return f"Check the patch file ({output_path}) failed.\n{e}"
+            result = {
+                "success": False,
+                "message": f"Check the patch file ({output_path}) failed.\n{e}",
+            }
+            return result
     finally:
         os.chdir(current_dir)
-    return f"Patch file:{output_path}"
+    result = {
+        "success": True,
+        "message": f"{os.path.relpath(output_path,workspe_dir)}",
+    }
+    return result
 
 
 import shutil
@@ -898,15 +929,9 @@ def apply_patch_with_git(
 
     def _apply_patch_real(repo, temp_file):
         """Execute actual patch application."""
-        try:
-            repo.git.apply(patch_file)
-            conflicts = False
-            message = f"Patch applied successfully. A new file containing the patched result has been generated at: {target_file} (Original file remains unchanged)"
-
-        except GitCommandError:
-            repo.git.apply("--3way", patch_file)
-            conflicts = True
-            message = f"Patch applied with 3-way merge. A new file containing the patched result has been generated at: {target_file} (Original file remains unchanged)"
+        repo.git.apply(patch_file)
+        conflicts = False
+        message = f"Patch applied successfully. A new file containing the patched result has been generated at: {target_file} (Original file remains unchanged)"
 
         shutil.copy2(temp_file, target_file)
         return {
@@ -914,7 +939,7 @@ def apply_patch_with_git(
             "message": message,
             "conflicts": conflicts,
             "dry_run": False,
-            "target_file": target_file,
+            "target_file": os.path.relpath(target_file, workspace_dir),
         }
 
     try:
@@ -925,9 +950,12 @@ def apply_patch_with_git(
         _prepare_paths()
 
         # Execute in temporary git repository
-        with temporary_git_repo(workspace=workspace_dir) as (repo, temp_dir):
+        with temporary_git_repo() as (repo, temp_dir):
+            rel_path = os.path.dirname(os.path.relpath(source_file, workspace_dir))
+            temp_target_file = os.path.join(temp_dir, rel_path)
+            os.makedirs(temp_target_file, exist_ok=True)
             # Setup initial state
-            temp_file = os.path.join(temp_dir, os.path.basename(source_file))
+            temp_file = os.path.join(temp_target_file, os.path.basename(source_file))
             shutil.copy2(source_file, temp_file)
             repo.index.add([temp_file])
             repo.index.commit("Initial commit")
