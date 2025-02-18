@@ -127,7 +127,7 @@ def create_agent_executor(
         prompts=prompt,
         tools=tools,
         memory=memory,
-        max_iterations=100,  # 设置最大迭代次数
+        max_iterations=20,  # 设置最大迭代次数
         max_execution_time=600,  # 设置最大执行时间（秒）
     )
     return executor

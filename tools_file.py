@@ -599,7 +599,7 @@ def get_file_contents_ctx(file_path, context_lines=3):
 
 
 @tool
-def generate_git_patch(
+def generate_git_patch_and_apply(
     file_path: str,
     patch_file_name: str,
     changes=None,
@@ -607,6 +607,7 @@ def generate_git_patch(
 ):
     """
     Generate git patch file based on changes.
+    Then apply the git patch to the file and save the result to a new file using git's patch application mechanism. (Original file will remain unchanged)
 
     Args:
         file_path (str): the full file path where the file data from
@@ -625,7 +626,12 @@ def generate_git_patch(
         context_lines (int): Number of context lines
 
     Returns:
-        str: Path to generated patch file
+        dict: A dictionary containing the patch application results with the following keys:
+            - success (bool): True if patch was applied successfully
+            - message (str): Descriptive message about the operation result
+            - conflicts (bool): True if there were conflicts during patch application
+            - dry_run (bool): True if this was a dry run operation
+            - target_file (str): Patch can be successfully applied. A new file will be generated at target_file (Original file will remain unchanged)
     """
     result = {"success": bool, "message": str}
     if changes is None or not isinstance(changes, list):
@@ -775,7 +781,7 @@ def generate_git_patch(
         os.chdir(workspe_dir)
         git = Git(workspe_dir)
         git.apply("--check", output_path)
-
+        return apply_patch_with_git(patch_file=output_path, source_file=file_path)
     except Exception as e:
 
         def extract_line_number(error_text):
@@ -800,22 +806,19 @@ def generate_git_patch(
             base_name = os.path.basename(file_path)
             result = {
                 "success": False,
+                "patch_content": patch_content,
                 "message": f"Check the patch file ({output_path}) failed.\n{e}\n{base_name} in line:{err_line_number} content is:\n{json.dumps(source_data)}",
             }
             return result
         else:
             result = {
                 "success": False,
+                "patch_content": patch_content,
                 "message": f"Check the patch file ({output_path}) failed.\n{e}",
             }
             return result
     finally:
         os.chdir(current_dir)
-    result = {
-        "success": True,
-        "message": f"{os.path.relpath(output_path,workspe_dir)}",
-    }
-    return result
 
 
 import shutil
@@ -868,7 +871,6 @@ def is_path_under_workspace(file_path, workspace_path):
         return False
 
 
-@tool
 def apply_patch_with_git(
     patch_file: str,
     source_file: str,
@@ -1001,8 +1003,8 @@ tools = [
     # write_to_file,
     create_empty_file,
     get_file_contents,
-    generate_git_patch,
-    apply_patch_with_git,
+    generate_git_patch_and_apply,
+    # apply_patch_with_git,
     # apply_gpt_suggestions,
     # get_code_modification_suggestions,
 ]

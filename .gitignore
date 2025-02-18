@@ -149,3 +149,4 @@ test.md
 *.content.json
 *.change.json
 chromedriver-mac-x64/
+*.patched

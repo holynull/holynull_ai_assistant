@@ -469,35 +469,45 @@ from langchain_core.documents import Document
 
 h2tTransformer = Html2TextTransformer()
 
+from langchain_community.document_loaders import WebBaseLoader
+
 
 # @tool
 def getDocumentFromLink(
     link: str, chunk_size: int, chunk_overlap: int
 ) -> List[Document]:
     """get documents from link."""
-    loader = SpiderLoader(
-        url=link,
-        mode="scrape",  # if no API key is provided it looks for SPIDER_API_KEY in env
-    )
+    webloader = WebBaseLoader(web_path=link)
     try:
-        html = loader.load()
+        docs = webloader.load()
+        if docs is None or len(docs) == 0:
+            raise Exception("WebBaseLoader can't load any content.")
+        return docs
     except Exception as e:
-        print(e)
-        clean_html = getHTMLFromURL(link)
-        html = [Document(clean_html)]
-    html = filter_complex_metadata(html)
-    html[0].metadata["source"] = ""
-    # docs_text = h2tTransformer.transform_documents(html)
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size, chunk_overlap=chunk_overlap
-    )
-    _split = text_splitter.split_documents(html)
-    splits = []
-    if len(splits) == 0:
-        splits = _split
-    else:
-        splits = splits + _split
-    return splits
+        print(f"WebBaseLoader load failed. {e}")
+        loader = SpiderLoader(
+            url=link,
+            mode="scrape",  # if no API key is provided it looks for SPIDER_API_KEY in env
+        )
+        try:
+            html = loader.load()
+        except Exception as e:
+            print(f"SpiderLoader load failed. {e}")
+            clean_html = getHTMLFromURL(link)
+            html = [Document(clean_html)]
+        html = filter_complex_metadata(html)
+        html[0].metadata["source"] = ""
+        # docs_text = h2tTransformer.transform_documents(html)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size, chunk_overlap=chunk_overlap
+        )
+        _split = text_splitter.split_documents(html)
+        splits = []
+        if len(splits) == 0:
+            splits = _split
+        else:
+            splits = splits + _split
+        return splits
 
 
 @tool
@@ -525,28 +535,31 @@ Context:
 
     splits = []
     for link in links:
-        _s = getDocumentFromLink(link, chunk_size=10000, chunk_overlap=1500)
-        if _s is not None and len(splits) == 0:
-            splits = _s
-        elif _s is not None and len(splits) > 0:
-            splits = splits + _s
-        else:
-            continue
-
-    contents = chain.batch(
-        [
-            {
-                "text": _split.page_content,
-                "question": question,
-            }
-            for _split in splits
-        ],
-        config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
-    )
-    return (
-        "The contents of the first three search results are extracted as follows:\n"
-        + "\n".join(contents)
-    )
+        try:
+            _s = getDocumentFromLink(link, chunk_size=10000, chunk_overlap=1500)
+            if _s is not None and len(splits) == 0:
+                splits = _s
+            elif _s is not None and len(splits) > 0:
+                splits = splits + _s
+            else:
+                continue
+        except Exception as e:
+            print(f"Access {link} failed. {e}")
+            break
+    if len(splits) > 0:
+        contents = chain.batch(
+            [
+                {
+                    "text": _split.page_content,
+                    "question": question,
+                }
+                for _split in splits
+            ],
+            config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
+        )
+        return "\n".join(contents)
+    else:
+        return "We can't get any relevant content in the links."
 
 
 @tool
@@ -576,21 +589,27 @@ Context:
 ```
 """
     chain = ChatPromptTemplate.from_template(prompt_template) | llm | StrOutputParser()
-    splits = getDocumentFromLink(link, chunk_size=1000, chunk_overlap=200)
-    contents = chain.batch(
-        [
-            {
-                "link": link,
-                "text": _split.page_content,
-                "question": question,
-            }
-            for _split in splits
-        ],
-        config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
-    )
-    return "The content snippet obtained from the link is as follows:\n" + (
-        "\n" + "#" * 70 + "\n"
-    ).join(contents)
+    try:
+        splits = getDocumentFromLink(link, chunk_size=1000, chunk_overlap=200)
+    except Exception as e:
+        return f"Get content from links failed. {e}"
+    if splits and len(splits) > 0:
+        contents = chain.batch(
+            [
+                {
+                    "link": link,
+                    "text": _split.page_content,
+                    "question": question,
+                }
+                for _split in splits
+            ],
+            config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
+        )
+        return "The content snippet obtained from the link is as follows:\n" + (
+            "\n" + "#" * 70 + "\n"
+        ).join(contents)
+    else:
+        return "We can't get any content in the link."
 
 
 @tool
@@ -618,28 +637,31 @@ Context:
 
     splits = []
     for link in links:
-        _s = getDocumentFromLink(link, chunk_size=10000, chunk_overlap=1500)
-        if _s is not None and len(splits) == 0:
-            splits = _s
-        elif _s is not None and len(splits) > 0:
-            splits = splits + _s
-        else:
-            continue
-
-    contents = chain.batch(
-        [
-            {
-                "text": _split.page_content,
-                "question": question,
-            }
-            for _split in splits
-        ],
-        config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
-    )
-    return (
-        "The contents of the first three search results are extracted as follows:\n"
-        + "\n".join(contents)
-    )
+        try:
+            _s = getDocumentFromLink(link, chunk_size=10000, chunk_overlap=1500)
+            if _s is not None and len(splits) == 0:
+                splits = _s
+            elif _s is not None and len(splits) > 0:
+                splits = splits + _s
+            else:
+                continue
+        except Exception as e:
+            print(f"Access {link} failed. {e}")
+            break
+    if len(splits) > 0:
+        contents = chain.batch(
+            [
+                {
+                    "text": _split.page_content,
+                    "question": question,
+                }
+                for _split in splits
+            ],
+            config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
+        )
+        return "\n".join(contents)
+    else:
+        return "We can't get any relevant content in the links."
 
 
 def remove_html_tags(text):
@@ -758,16 +780,15 @@ def getHTMLFromURL(url: str) -> str:
         return f"{e}"
 
 
-@tool
-def getContentFromURL(url: str, tag: str, class_: str) -> str:
+def getContentFromURL(url: str) -> str:
     """Useful when you need to get the text content of the html tag in the URL page.
     The parameter `url` is the URL link of the page you need to read.
     The parameters `tag` and `class_` represent extracting the text content of `tag` whose classes attribute is equal to `class_`.
     """
     response = requests.get(url)
     soup = BeautifulSoup(response.text, "html.parser")
-    html = soup.find(tag, class_=class_)
-    return remove_html_tags(str(html))
+    html = soup.find("body")
+    return str(soup.body)  # remove_html_tags(str(html))
 
 
 @tool

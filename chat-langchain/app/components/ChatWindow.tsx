@@ -463,14 +463,14 @@ export function ChatWindow(props: { conversationId: string }) {
 									}
 								}
 							}
-							if ("name" in _chunk && (_chunk.name == "generate_git_patch")) {
+							if ("name" in _chunk && (_chunk.name == "generate_git_patch_and_apply")) {
 
 								if ("data" in _chunk) {
 									var data = _chunk.data as object;
 									if ("output" in data) {
 										const results = data.output as any;
 										if (results.success) {
-											accumulatedMessage += "\n" + "`" + results.message + "`\n";
+											accumulatedMessage += "\n" + "`" + results.target_file + "`\n";
 										}
 									}
 								}
