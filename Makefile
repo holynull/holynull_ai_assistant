@@ -18,3 +18,7 @@ start:
 format:
 	black .
 	isort .
+start_ollama_serve:
+	export OLLAMA_HOST=127.0.0.1 # environment variable to set ollama host
+	export OLLAMA_PORT=11434 # environment variable to set the ollama port
+	ollama serve

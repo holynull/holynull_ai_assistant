@@ -8,6 +8,7 @@ from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatPerplexity
 from langchain_mistralai import ChatMistralAI
 from langchain_cohere import ChatCohere
+from langchain_ollama import ChatOllama
 
 # from callback import AgentCallbackHandler
 # from langchain.callbacks.manager import AsyncCallbackManager
@@ -154,6 +155,15 @@ llm_agent = ChatAnthropic(
         stream_usage=True,
         verbose=True,
     ),
+	anthropic_claude_3_7_sonnet=ChatAnthropic(
+        model="claude-3-7-sonnet-20250219",
+        max_tokens=2000,
+        temperature=0.7,
+        # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
+        streaming=True,
+        stream_usage=True,
+        verbose=True,
+    ),
     openai_gpt_3_5_turbo_1106=ChatOpenAI(
         model="gpt-3.5-turbo-1106",
         verbose=True,
@@ -192,5 +202,10 @@ llm_agent = ChatAnthropic(
     ),
     command_r_plus=ChatCohere(
         model="command-r-plus", temperature=0.9, verbose=True, streaming=True
+    ),
+    ollama_deepseek_r1_7B=ChatOllama(
+        model="deepseek-r1",
+        temperature=0,
+        # other params...
     ),
 )

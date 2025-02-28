@@ -577,7 +577,7 @@ export function ChatWindow(props: { conversationId: string }) {
 
 	return (
 		<div className="min-h-screen w-full bg-[#131318]">
-			{showPasteHint && <GlobalPasteHint onClose={handleClosePasteHint} />}
+			{/* {showPasteHint && <GlobalPasteHint onClose={handleClosePasteHint} />} */}
 			<div className="flex flex-col min-h-screen w-full bg-[#131318] overflow-x-hidden">
 				<div className="flex flex-col items-center p-4 md:p-8 grow w-full max-w-[1200px] mx-auto">
 					<Flex
@@ -626,8 +626,10 @@ export function ChatWindow(props: { conversationId: string }) {
 									{/* <option value="anthropic_claude_3_opus">Anthropic-Claude-3-Opus</option> */}
 									{/* <option value="openai_gpt_4_turbo_preview">GPT-4-Turbo</option> */}
 									<option value="anthropic_claude_3_5_sonnet">Anthropic-Claude-3.5-Sonnet</option>
-									<option value="openai_gpt_4o">GPT-4o</option>
-									<option value="openai_gpt_4o_mini">GPT-4o-mini</option>
+									<option value="anthropic_claude_3_7_sonnet">Anthropic-Claude-3.7-Sonnet</option>
+									<option value="ollama_deepseek_r1_7B">Ollama-DeepSeek-R1-7B</option>
+									{/* {<option value="openai_gpt_4o">GPT-4o</option>} */}
+									{/* {<option value="openai_gpt_4o_mini">GPT-4o-mini</option>} */}
 									{/* <option value="openai_gpt_3_5_turbo_1106">GPT-3.5-Turbo</option> */}
 									{/* <option value="pplx_sonar_medium_chat">PPLX_sonar_medium_chat</option> */}
 									{/* <option value="mistral_large">Mistral-Large</option> */}
