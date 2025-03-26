@@ -220,23 +220,52 @@ class GitPatchGenerator:
                         old_lines += 1
                         new_lines += 1
 
+                # 处理代码块更改
+                def process_multiline_content(content: str) -> List[str]:
+                    """处理多行内容,返回行列表"""
+                    if not content:
+                        return []
+                    return content.split("\n")
+
                 # Add the change
                 if change["type"] == "modify":
-                    current_hunk.append(f'-{change["old"]}')
-                    current_hunk.append(f'+{change["new"]}')
-                    old_lines += 1
-                    new_lines += 1
+                    # 处理老内容
+                    old_lines_content = process_multiline_content(change["old"])
+                    for line in old_lines_content:
+                        current_hunk.append(f"-{line}")
+                        old_lines += 1
+
+                    # 处理新内容
+                    new_lines_content = process_multiline_content(change["new"])
+                    for line in new_lines_content:
+                        current_hunk.append(f"+{line}")
+                        new_lines += 1
+
                 elif change["type"] == "add":
-                    current_hunk.append(f'+{change["new"]}')
-                    new_lines += 1
+                    new_lines_content = process_multiline_content(change["new"])
+                    for line in new_lines_content:
+                        current_hunk.append(f"+{line}")
+                        new_lines += 1
+
                 elif change["type"] == "delete":
-                    current_hunk.append(f'-{change["old"]}')
-                    old_lines += 1
+                    old_lines_content = process_multiline_content(change["old"])
+                    for line in old_lines_content:
+                        current_hunk.append(f"-{line}")
+                        old_lines += 1
 
             # Add final context lines
-            if hunk_start is not None:
+            if hunk_start is not None and changes:
+                last_change = changes[-1]
+                last_line = last_change["line"]
+
+                # 对于多行更改,需要计算实际的最后一行
+                if last_change.get("new"):
+                    last_line += len(process_multiline_content(last_change["new"]))
+                elif last_change.get("old"):
+                    last_line += len(process_multiline_content(last_change["old"]))
+
                 for i in range(self.context_lines):
-                    line_idx = change["line"] + i
+                    line_idx = last_line + i
                     if line_idx < len(original_lines):
                         current_hunk.append(f" {original_lines[line_idx]}")
                         old_lines += 1
@@ -553,15 +582,17 @@ def generate_and_apply_patch_safely(
 
     return result_file, patch_preview
 
+
 def create_test_file(content: str, file_path: str):
     """Create a test file with given content"""
-    with open(file_path, 'w', encoding='utf-8') as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         f.write(content)
+
 
 def test_basic_patch():
     """Test basic patch generation and application"""
     print("\n=== Testing Basic Patch ===")
-    
+
     # Create test file
     source_content = """Line 1
 Line 2
@@ -574,27 +605,14 @@ Line 5
 
     # Define changes
     changes = [
-        {
-            'line': 2,
-            'old': 'Line 2',
-            'new': 'Modified Line 2',
-            'type': 'modify'
-        },
-        {
-            'line': 4,
-            'new': 'New Line',
-            'old': '',
-            'type': 'add'
-        }
+        {"line": 2, "old": "Line 2", "new": "Modified Line 2", "type": "modify"},
+        {"line": 4, "new": "New Line", "old": "", "type": "add"},
     ]
 
     try:
         # Generate and apply patch with preview
         result_file, preview = generate_and_apply_patch_safely(
-            source_file,
-            changes,
-            target_file="test_result.txt",
-            preview=True
+            source_file, changes, target_file="test_result.txt", preview=True
         )
 
         # Show preview
@@ -605,7 +623,7 @@ Line 5
 
         # Show final content
         print("\nFinal content:")
-        with open(result_file, 'r') as f:
+        with open(result_file, "r") as f:
             print(f.read())
 
     except GitPatchError as e:
@@ -616,10 +634,50 @@ Line 5
             if os.path.exists(file):
                 os.remove(file)
 
+
+def test_multiline_changes():
+    """Test handling of multiline changes"""
+    print("\n=== Testing Multiline Changes ===")
+
+    source_content = """def old_function():
+    pass
+    
+tools = [
+    create_empty_file,
+]"""
+
+    source_file = "test_source.txt"
+    create_test_file(source_content, source_file)
+
+    # 多行更改测试
+    changes = [
+        {
+            "line": 1,
+            "old": "def old_function():\n    pass",
+            "new": '@tool\ndef fibonacci(n: int) -> list:\n    """\n    生成斐波那契数列\n    """\n    if n <= 0:\n        return []\n    elif n == 1:\n        return [0]\n    \n    fib = [0, 1]\n    for i in range(2, n):\n        fib.append(fib[i-1] + fib[i-2])\n    \n    return fib',
+            "type": "modify",
+        }
+    ]
+
+    try:
+        result_file, preview = generate_and_apply_patch_safely(
+            source_file, changes, preview=True
+        )
+
+        print("\nPatch Preview:")
+        print(preview.get_preview())
+
+    except GitPatchError as e:
+        print(f"Error: {e}")
+    finally:
+        if os.path.exists(source_file):
+            os.remove(source_file)
+
+
 def test_conflict_handling():
     """Test patch conflict detection and handling"""
     print("\n=== Testing Conflict Handling ===")
-    
+
     # Create test file with content that will conflict
     source_content = """Line 1
 Modified content
@@ -633,32 +691,27 @@ Line 5
     # Define changes that will conflict
     changes = [
         {
-            'line': 2,
-            'old': 'Line 2',  # This doesn't match the actual content
-            'new': 'Modified Line 2',
-            'type': 'modify'
+            "line": 2,
+            "old": "Line 2",  # This doesn't match the actual content
+            "new": "Modified Line 2",
+            "type": "modify",
         }
     ]
 
     try:
         # Try to apply patch normally
         result_file, preview = generate_and_apply_patch_safely(
-            source_file,
-            changes,
-            preview=True
+            source_file, changes, preview=True
         )
 
     except PatchConflictError as e:
         print("\nDetected conflict as expected:")
         print(e)
-        
+
         # Try force apply
         print("\nTrying with force=True:")
         result_file, preview = generate_and_apply_patch_safely(
-            source_file,
-            changes,
-            force=True,
-            preview=True
+            source_file, changes, force=True, preview=True
         )
         print(preview.get_preview())
 
@@ -667,10 +720,11 @@ Line 5
         if os.path.exists(source_file):
             os.remove(source_file)
 
+
 def test_patch_statistics():
     """Test patch statistics generation"""
     print("\n=== Testing Patch Statistics ===")
-    
+
     # Create test file
     source_content = """Line 1
 Line 2
@@ -683,32 +737,15 @@ Line 5
 
     # Define various types of changes
     changes = [
-        {
-            'line': 2,
-            'old': 'Line 2',
-            'new': 'Modified Line 2',
-            'type': 'modify'
-        },
-        {
-            'line': 4,
-            'new': 'New Line',
-            'old': '',
-            'type': 'add'
-        },
-        {
-            'line': 5,
-            'old': 'Line 5',
-            'new': '',
-            'type': 'delete'
-        }
+        {"line": 2, "old": "Line 2", "new": "Modified Line 2", "type": "modify"},
+        {"line": 4, "new": "New Line", "old": "", "type": "add"},
+        {"line": 5, "old": "Line 5", "new": "", "type": "delete"},
     ]
 
     try:
         # Generate and apply patch
         result_file, preview = generate_and_apply_patch_safely(
-            source_file,
-            changes,
-            preview=True
+            source_file, changes, preview=True
         )
 
         # Show statistics
@@ -726,8 +763,10 @@ Line 5
         if os.path.exists(source_file):
             os.remove(source_file)
 
+
 if __name__ == "__main__":
     # Run all tests
     test_basic_patch()
+    test_multiline_changes()
     test_conflict_handling()
     test_patch_statistics()
