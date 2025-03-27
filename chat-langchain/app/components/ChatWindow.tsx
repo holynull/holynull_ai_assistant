@@ -84,7 +84,7 @@ export function ChatWindow(props: { conversationId: string }) {
 		{ type: string; content: string }[]
 	>([]);
 
-	const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>(ProcessingStatus.Idle);
+	const [processingStatus, setProcessingStatus] = useState<string>(ProcessingStatus.Idle);
 
 	const handleCancel = useCallback(async () => {
 		if (abortController && !abortController.signal.aborted) {
@@ -115,7 +115,7 @@ export function ChatWindow(props: { conversationId: string }) {
 		};
 	}, [abortController]);
 
-	function showProcessingStatus(status: ProcessingStatus) {
+	function showProcessingStatus(status: string | undefined) {
 		switch (status) {
 			case ProcessingStatus.Idle:
 				return null;
@@ -194,6 +194,13 @@ export function ChatWindow(props: { conversationId: string }) {
 					<div className="flex items-center text-green-500">
 						<FaCheck className="mr-2" size={20} />
 						<span>Got Relevant Content from Link</span>
+					</div>
+				);
+			default:
+				return (
+					<div className="flex items-center text-green-500">
+						<FaCheck className="mr-2" size={20} />
+						<span>{status}</span>
 					</div>
 				);
 		}
@@ -458,6 +465,7 @@ export function ChatWindow(props: { conversationId: string }) {
 							break;
 						case "on_chat_model_end":
 							setProcessingStatus(ProcessingStatus.Completed);
+							accumulatedMessage += '\n'
 							break;
 						case "on_chat_model_stream":
 							setProcessingStatus(ProcessingStatus.Typing);
@@ -504,7 +512,15 @@ export function ChatWindow(props: { conversationId: string }) {
 							break
 						case "on_tool_start":
 							setProcessingStatus(ProcessingStatus.InvokingTool);
-
+							if ("name" in _chunk && (_chunk.name == "run_one_step")) {
+								if ("data" in _chunk) {
+									var data = _chunk.data as object;
+									if ("input" in data) {
+										let message = data.input as any;
+										setProcessingStatus(message['num'] + ' is running.');
+									}
+								}
+							}
 							break;
 						case "on_tool_end":
 							setProcessingStatus(ProcessingStatus.Processing);
@@ -550,6 +566,47 @@ export function ChatWindow(props: { conversationId: string }) {
 												title: doc.title,
 												img_src: doc.imageUrl,
 											}));
+										}
+									}
+								}
+							}
+							if ("name" in _chunk && (_chunk.name == "get_file_contents")) {
+								if ("data" in _chunk) {
+									var data = _chunk.data as object;
+									if ("output" in data) {
+										let message = data.output as ToolMessage;
+										let result = JSON.parse(message.content as string);
+										if (result['lines'] && result['lines'].length > 0) {
+											accumulatedMessage += "```plaintext\n"
+										}
+										for (let line of result['lines']) {
+											accumulatedMessage += line['content'] + '\n'
+										}
+										if (result['lines'] && result['lines'].length > 0) {
+											accumulatedMessage += "```\n"
+										}
+									}
+								}
+							}
+							if ("name" in _chunk && (_chunk.name == "list_workspace_directory")) {
+								if ("data" in _chunk) {
+									var data = _chunk.data as object;
+									if ("output" in data) {
+										let message = data.output as ToolMessage;
+										accumulatedMessage += "```plaintext\n"
+										accumulatedMessage += message.content + '\n'
+										accumulatedMessage += "```\n"
+									}
+								}
+							}
+							if ("name" in _chunk && (_chunk.name == "design_code_modification_plan")) {
+								if ("data" in _chunk) {
+									var data = _chunk.data as object;
+									if ("output" in data) {
+										let message = data.output as ToolMessage;
+										let result = JSON.parse(message.content as string);
+										for (let p of result) {
+											accumulatedMessage += "- *" + p['num'] + ' ' + p['name'] + "*:\n" + p['description'] + "\n"
 										}
 									}
 								}
@@ -731,7 +788,7 @@ export function ChatWindow(props: { conversationId: string }) {
 							</div>
 						</div>
 						<div className="ml-4">
-							{showProcessingStatus(processingStatus)}
+							{showProcessingStatus(processingStatus?.toString())}
 						</div>
 					</Flex>
 					<div

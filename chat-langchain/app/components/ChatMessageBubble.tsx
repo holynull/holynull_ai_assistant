@@ -76,7 +76,7 @@ const createAnswerElements = (
 	const elements: JSX.Element[] = [];
 	let prevIndex = 0;
 	DOMPurify.setConfig({
-		ALLOWED_TAGS: ['iframe', 'pre', 'code', 'p', 'ol', 'li', 'ul','span'],
+		ALLOWED_TAGS: ['iframe', 'pre', 'code', 'p', 'ol', 'li', 'ul', 'span', 'img', 'br'],
 		ALLOWED_ATTR: ['src', 'width', 'height', 'frameborder', 'allowfullscreen', 'style', 'class']
 	});
 	matches.forEach((match) => {

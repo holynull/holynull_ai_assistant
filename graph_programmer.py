@@ -114,7 +114,11 @@ def find_last_success_step(messages: list[BaseMessage]):
     return None
 
 
-async def node_generate_change_data(state: GraphState):
+def call_model_1(state: GraphState, config: RunnableConfig):
+    raise NotImplementedError()
+
+
+async def acall_model_1(state: GraphState, config: RunnableConfig):
     last_success_step = find_last_success_step(state["messages"])
     if last_success_step:
         content = json.loads(last_success_step.content)
@@ -212,99 +216,9 @@ async def node_generate_change_data(state: GraphState):
     }
 
 
-async def node_generate_change_data_0(state: GraphState):
-    get_content_message: ToolMessage = None
-    for message in reversed(state["messages"]):
-        if (
-            isinstance(message, ToolMessage)
-            and message.name == get_file_contents.get_name()
-        ):
-            get_content_message = message
-            break
-    if not get_content_message:
-        last_message = state["messages"][-1]
-        last_message.content = "We need read the file in the workspace."
-        return Command(goto=node_llm.get_name(), update={"messages": [last_message]})
-
-    for message in reversed(state["messages"]):
-        if isinstance(message, HumanMessage):
-            last_human_message = message
-            break
-    for index, message in enumerate(state["messages"]):
-        if last_human_message.id == message.id:
-            last_human_message_index = index
-            break
-    new_content = (
-        f"{last_human_message.content}"
-        """\nPlease generate file change data according to the following format:
-        ```json
-            [
-                {{
-                    'line': int,       # Line number to modify
-                    'old': str,        # Original content
-                    'new': str,        # New content
-                    'type': str        # Change type: 'modify', 'add', or 'delete'
-                }},
-                ...
-            ]
-        ```
-        NOTE:
-            - ONLY RETURN THE JSON CODE BLOCK!
-            - `old` must be a single line in the original file, not multiple lines.
-        """
-    )
-
-    # state["messages"][last_human_message_index].content = new_content
-    new_messages = copy.deepcopy(state["messages"])
-    new_messages[last_human_message_index].content = new_content
-    _llm_0 = ChatAnthropic(
-        model="claude-3-7-sonnet-20250219",
-        max_tokens=4096,
-        temperature=0.7,
-        # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
-        streaming=True,
-        stream_usage=True,
-        verbose=True,
-    )
-    changes = []
-    retry_count = 0
-    json_content = ""
-    while retry_count < MAX_RETRIES_GENERATE_CHANGE_LIST:
-        try:
-            response = cast(AIMessage, await _llm_0.ainvoke(new_messages))
-            content = response.content
-            # 提取JSON部分
-            if "```json" in content:
-                parts = content.split("```json")
-                if len(parts) > 1:
-                    json_content = parts[1]
-                    if "```" in json_content:
-                        json_content = json_content.split("```")[0].strip()
-            else:
-                json_content += content
-                if "```" in json_content:
-                    json_content = json_content.split("```")[0].strip()
-            json_content.strip()
-
-            if json_content:
-                changes = json.loads(json_content)
-                if retry_count > 0:
-                    logging.warning(
-                        f"Try generate change list in {retry_count+1} times."
-                    )
-                break
-            new_messages.append(
-                HumanMessage("Please continue to return the complete code.")
-            )
-        except json.JSONDecodeError as e:
-            logging.warning(f"JSON解析错误: {e}")
-            retry_count += 1
-    content = json.loads(get_content_message.content)
-    return {
-        "change_list": changes,
-        "file_path": content["file_path"],
-        "messages": state["messages"],
-    }
+node_generate_change_data = RunnableCallable(
+    call_model, acall_model_1, name="node_generate_change_data"
+)
 
 
 from git_patch_generator import generate_and_apply_patch_safely
@@ -351,12 +265,12 @@ def edge_tools_to_modification(state: GraphState):
     ):
         return node_llm.get_name()
     else:
-        return node_generate_change_data.__name__
+        return node_generate_change_data.get_name()
 
 
 graph_builder.add_node(node_llm.name, node_llm)
 graph_builder.add_node(tool_node.get_name(), tool_node)
-graph_builder.add_node(node_generate_change_data.__name__, node_generate_change_data)
+graph_builder.add_node(node_generate_change_data.get_name(), node_generate_change_data)
 graph_builder.add_node(node_generate_git_patch.__name__, node_generate_git_patch)
 
 graph_builder.add_conditional_edges(
@@ -368,12 +282,12 @@ graph_builder.add_conditional_edges(
     tool_node.get_name(),
     edge_tools_to_modification,
     {
-        node_generate_change_data.__name__: node_generate_change_data.__name__,
+        node_generate_change_data.get_name(): node_generate_change_data.get_name(),
         node_llm.get_name(): node_llm.get_name(),
     },
 )
 graph_builder.add_edge(
-    node_generate_change_data.__name__, node_generate_git_patch.__name__
+    node_generate_change_data.get_name(), node_generate_git_patch.__name__
 )
 graph_builder.add_edge(node_generate_git_patch.__name__, node_llm.get_name())
 

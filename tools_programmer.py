@@ -730,10 +730,11 @@ def create_empty_file(file_path: str) -> str:
 
 
 @tool
-def run_one_step(name: str, description: str, file_path: str):
+def run_one_step(num: str, name: str, description: str, file_path: str):
     """Perform one code modification step of the step-by-step tasks to complete programming requirements
 
     Args:
+                                num (str): Step's No.
                 name (str): Step's name
         description: Description of the steps and what needs to be achieved
     """
@@ -742,14 +743,15 @@ def run_one_step(name: str, description: str, file_path: str):
 
 @tool
 def design_code_modification_plan(data: list[dict]):
-    """After analyzing the code, design a step-by-step plan for modifying the code that contains only the specific steps to modify the code. 
+    """After analyzing the code, design a step-by-step plan for modifying the code that contains only the specific steps to modify the code.
     Note: The step descriptions must be specific and unambiguous.
 
     Args:
             data (list[dict]): Data of plan.
                 Element in the list is a dict with:
+                - num (str): Step's No., example 'Step 1'
                 - name (str): Step's name.
-                - description(str):Description of the steps and what needs to be achieved about source code.
+                - description (str): Description of the steps and what needs to be achieved about source code.
     """
     return data
 
