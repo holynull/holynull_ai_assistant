@@ -25,8 +25,8 @@ import {
 import { ArrowUpIcon, CloseIcon, Icon, SmallCloseIcon } from "@chakra-ui/icons";
 import { Select } from "@chakra-ui/react";
 import { Source } from "./SourceBubble";
-import { AIMessageChunk } from "@langchain/core/messages"
-import { FaCircleNotch, FaTools, FaKeyboard, FaCheck, FaLightbulb, FaPlus } from 'react-icons/fa';
+import { AIMessageChunk, ToolMessage } from "@langchain/core/messages"
+import { FaCircleNotch, FaTools, FaKeyboard, FaCheck, FaPlus } from 'react-icons/fa';
 
 import {
 	UploadedImageFile,
@@ -42,8 +42,15 @@ enum ProcessingStatus {
 	InvokingTool = "invoking_tool",
 	Processing = "processing",
 	Typing = "typing",
-	Completed = "completed"
+	Completed = "completed",
+	SearchStart = "searching-start",
+	SearchEnd = "searching-end",
+	ReadLinksContentStart = "ReadLinksContentStart",
+	ReadLinksContentEnd = "ReadLinksContentEnd",
+	ExtractLinksContentStart = "ExtractLinksContentStart",
+	ExtractLinksContentEnd = "ExtractLinksContentEnd",
 }
+
 export function ChatWindow(props: { conversationId: string }) {
 	const conversationId = props.conversationId;
 
@@ -57,10 +64,13 @@ export function ChatWindow(props: { conversationId: string }) {
 	const [imageUrls, setImageUrls] = useState<UploadedImageUrl[]>([]);
 	const [pdfFiles, setPdfFiles] = useState<UploadedPDFFile[]>([]);
 
+
+
+
 	const openFileUpload = () => {
 		if (!showUpload) {
 			setShowUpload(prev => !prev);
-			console.log("show upload:" + showUpload)
+			// console.log("show upload:" + showUpload)
 		}
 	};
 
@@ -142,6 +152,48 @@ export function ChatWindow(props: { conversationId: string }) {
 					<div className="flex items-center text-green-500">
 						<FaCheck className="mr-2" size={20} />
 						<span>Completed</span>
+					</div>
+				);
+			case ProcessingStatus.SearchStart:
+				return (
+					<div className="flex items-center text-green-500">
+						<FaCheck className="mr-2" size={20} />
+						<span>Searching Started</span>
+					</div>
+				);
+			case ProcessingStatus.SearchEnd:
+				return (
+					<div className="flex items-center text-green-500">
+						<FaCheck className="mr-2" size={20} />
+						<span>Searching End</span>
+					</div>
+				);
+			case ProcessingStatus.ReadLinksContentStart:
+				return (
+					<div className="flex items-center text-green-500">
+						<FaCheck className="mr-2" size={20} />
+						<span>Reading Links from Search</span>
+					</div>
+				);
+			case ProcessingStatus.ReadLinksContentEnd:
+				return (
+					<div className="flex items-center text-green-500">
+						<FaCheck className="mr-2" size={20} />
+						<span>Reading Links from Search End</span>
+					</div>
+				);
+			case ProcessingStatus.ExtractLinksContentStart:
+				return (
+					<div className="flex items-center text-green-500">
+						<FaCheck className="mr-2" size={20} />
+						<span>Extracting Link Content</span>
+					</div>
+				);
+			case ProcessingStatus.ExtractLinksContentEnd:
+				return (
+					<div className="flex items-center text-green-500">
+						<FaCheck className="mr-2" size={20} />
+						<span>Got Relevant Content from Link</span>
 					</div>
 				);
 		}
@@ -321,15 +373,28 @@ export function ChatWindow(props: { conversationId: string }) {
 
 		try {
 			const remoteChain = new RemoteRunnable({
-				url: process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL : "",
+				url: process.env.NEXT_PUBLIC_CHAT_URL ? process.env.NEXT_PUBLIC_CHAT_URL : "",
 				options: {
 					timeout: 3000000,
 				},
 			});
 			const llmDisplayName = llm ?? "openai_gpt_3_5_turbo";
-			const streams = await remoteChain.stream(
+			let messages: any;
+			if (currentImages && currentImages.length > 0) {
+				messages = [{ "type": "human", "content": [{ "type": "text", "text": messageValue }] }];
+				let _content = messages[0].content;
+				for (const url of currentImages) {
+					_content.push({ "type": "image_url", "image_url": { "url": url } })
+				}
+				messages[0].content = _content;
+			} else {
+				messages = [{ "type": "human", "content": messageValue }]
+			}
+			let streams = await remoteChain.stream(
 				{
-					input: messageValue,
+					messages: messages,
+					time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+					llm: llmDisplayName,
 					// chat_history: chatHistory,
 					chat_history: [],
 					image_urls: currentImages,
@@ -338,6 +403,8 @@ export function ChatWindow(props: { conversationId: string }) {
 				{
 					configurable: {
 						llm: llmDisplayName,
+						thread_id: conversationId,
+						recursion_limit: 50
 					},
 					tags: ["model:" + llmDisplayName],
 					metadata: {
@@ -353,6 +420,7 @@ export function ChatWindow(props: { conversationId: string }) {
 				// },
 			);
 			for await (const chunk of streams) {
+				console.log(chunk)
 				var _chunk: object
 				if (typeof chunk === "object") {
 					_chunk = chunk as object;
@@ -362,10 +430,26 @@ export function ChatWindow(props: { conversationId: string }) {
 					var kind = "event" in _chunk ? _chunk.event : "";
 					switch (kind) {
 						case "on_chain_start":
-							setProcessingStatus(ProcessingStatus.SynthesizingQuestion);
+							if (_chunk && (_chunk as any).name == 'graph_search') {
+								setProcessingStatus(ProcessingStatus.SearchStart);
+							} else if (_chunk && (_chunk as any).name == 'node_read_content') {
+								setProcessingStatus(ProcessingStatus.ReadLinksContentStart);
+							} else if (_chunk && (_chunk as any).name == "node_extranct_relevant_content") {
+								setProcessingStatus(ProcessingStatus.ExtractLinksContentStart);
+							} else {
+								setProcessingStatus(ProcessingStatus.SynthesizingQuestion);
+							}
 							break;
 						case "on_chain_end":
-							setProcessingStatus(ProcessingStatus.Processing);
+							if (_chunk && (_chunk as any).name == 'graph_search') {
+								setProcessingStatus(ProcessingStatus.SearchEnd);
+							} else if (_chunk && (_chunk as any).name == 'node_read_content') {
+								setProcessingStatus(ProcessingStatus.ReadLinksContentEnd);
+							} else if (_chunk && (_chunk as any).name == "node_extranct_relevant_content") {
+								setProcessingStatus(ProcessingStatus.ExtractLinksContentEnd);
+							} else {
+								setProcessingStatus(ProcessingStatus.SynthesizingQuestion);
+							}
 							break;
 						case "on_chain_stream":
 							break
@@ -420,6 +504,7 @@ export function ChatWindow(props: { conversationId: string }) {
 							break
 						case "on_tool_start":
 							setProcessingStatus(ProcessingStatus.InvokingTool);
+
 							break;
 						case "on_tool_end":
 							setProcessingStatus(ProcessingStatus.Processing);
@@ -440,7 +525,9 @@ export function ChatWindow(props: { conversationId: string }) {
 								if ("data" in _chunk) {
 									var data = _chunk.data as object;
 									if ("output" in data) {
-										var _output = data.output as Array<any>
+										let message = data.output as ToolMessage;
+										let result = JSON.parse(message.content as string);
+										var _output = result;//data.output as Array<any>
 										currentSources = _output.map((doc: Record<string, any>) => ({
 											url: doc.value.url,
 											title: doc.value.title,
@@ -449,17 +536,21 @@ export function ChatWindow(props: { conversationId: string }) {
 									}
 								}
 							}
-							if ("name" in _chunk && (_chunk.name == "searchWebPageToAnswer" || _chunk.name == "searchNewsToAnswer")) {
-
+							if ("name" in _chunk && (_chunk.name == "search_webpage" || _chunk.name == "search_news")) {
 								if ("data" in _chunk) {
 									var data = _chunk.data as object;
 									if ("output" in data) {
-										var output = eval('(' + data.output + ')');
-										sources = output.map((doc: Record<string, any>) => ({
-											url: doc.link,
-											title: doc.title,
-											img_src: doc.imageUrl,
-										}));
+										let message = data.output as ToolMessage;
+										let result = JSON.parse(message.content as string);
+										var output = result;//eval('(' + data.output + ')') as object;
+										if ("search_result" in output) {
+											var search_result = output.search_result as Array<any>
+											currentSources = search_result.map((doc: Record<string, any>) => ({
+												url: doc.link,
+												title: doc.title,
+												img_src: doc.imageUrl,
+											}));
+										}
 									}
 								}
 							}
@@ -515,7 +606,6 @@ export function ChatWindow(props: { conversationId: string }) {
 						default:
 							break
 					}
-
 				}
 			}
 			setChatHistory((prevChatHistory) => [
@@ -526,6 +616,7 @@ export function ChatWindow(props: { conversationId: string }) {
 			setIsLoading(false);
 			setAbortController(null);
 			setProcessingStatus(ProcessingStatus.Idle);
+
 		} catch (e) {
 			// setMessages((prevMessages) => prevMessages.slice(0, -1));
 			setIsLoading(false);
@@ -534,6 +625,8 @@ export function ChatWindow(props: { conversationId: string }) {
 			setProcessingStatus(ProcessingStatus.Idle);
 			throw e;
 		}
+
+
 	};
 
 	const insertUrlParam = (key: string, value?: string) => {

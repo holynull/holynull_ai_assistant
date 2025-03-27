@@ -7,7 +7,7 @@ from uuid import UUID
 import langsmith
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from langserve import APIHandler, add_routes
+from api_handler import APIHandler
 
 # from langsmith import Client
 from pydantic import BaseModel
@@ -38,66 +38,36 @@ from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
 
 
 class Input(BaseModel):
-    input: str
-    image_urls: list[str]
-    chat_history: List[Union[HumanMessage, AIMessage, FunctionMessage]]
+    messages: list[dict]
+    time_zone: str
+    llm: str
 
 
 class Output(BaseModel):
     output: Any
 
+
 chat_memories = {}
 agent_executors = {}
+
+from langgraph.checkpoint.memory import MemorySaver
+
+memory = MemorySaver()
+
+from graph_chatbot import graph_builder
+
+graph = graph_builder.compile(checkpointer=memory, debug=True)
 
 
 @app.post("/chat/stream", include_in_schema=False)
 async def simple_invoke(request: Request) -> Response:
-    """Handle a request."""
-    # The API Handler validates the parts of the request
-    # that are used by the runnnable (e.g., input, config fields)
-    body = await request.json()
-    conversation_id = body["config"]["metadata"]["conversation_id"]
-    is_multimodal = body["config"]["metadata"]["is_multimodal"]
-    image_urls = body["input"]["image_urls"]
-    if conversation_id in chat_memories:
-        # agent_executor = agent_executors[conversation_id]
-        memory = chat_memories[conversation_id]
-        agent_executor = create_agent_executor(
-            llm_agent=llm_agent,
-            memory=memory,
-            is_multimodal=is_multimodal,
-            image_urls=image_urls,
-        )
-        agent_executors[conversation_id] = {
-            "executor": agent_executor,
-            "is_multimodal": is_multimodal,
-        }
-        api_handler = APIHandler(
-            agent_executor.with_types(input_type=Input, output_type=Output),
-            path="/chat",
-            # config_keys=["metadata", "configurable", "tags", "llm"],
-        )
-    else:
-        memory = ConversationBufferMemory(
-            input_key="input", memory_key="chat_history", return_messages=True
-        )
-        agent_executor = create_agent_executor(
-            llm_agent=llm_agent,
-            memory=memory,
-            is_multimodal=is_multimodal,
-            image_urls=image_urls,
-        )
-        chat_memories[conversation_id] = memory
-        agent_executors[conversation_id] = {
-            "executor": agent_executor,
-            "is_multimodal": is_multimodal,
-        }
-        api_handler = APIHandler(
-            agent_executor.with_types(input_type=Input, output_type=Output),
-            path="/chat",
-            # config_keys=["metadata", "configurable", "tags", "llm"],
-        )
-    return await api_handler.astream_events(request)
+    api_handler = APIHandler(
+        graph.with_types(input_type=Input, output_type=Output),
+        path="/chat",
+    )
+    return await api_handler.astream_events(
+        request, server_config={"recursion_limit": 50}
+    )
 
 
 # add_routes(

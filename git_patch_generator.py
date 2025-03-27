@@ -10,6 +10,10 @@ from dataclasses import dataclass
 from difflib import unified_diff
 import json
 from collections import defaultdict
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class GitPatchError(Exception):
@@ -183,103 +187,110 @@ class GitPatchGenerator:
     ) -> str:
         """Generate git patch from changes"""
         try:
-            # Validate file path
             if not file_path:
                 raise GitPatchError("File path cannot be empty")
 
-            # Read file if exists
-            original_content = ""
-            if os.path.exists(file_path):
-                with open(file_path, "r", encoding="utf-8") as f:
-                    original_content = f.read()
+            # 读取原始文件内容
+            with open(file_path, "r", encoding="utf-8") as f:
+                original_lines = f.readlines()
 
-            # Sort changes by line number
+            # 对变更按行号排序
             changes = sorted(changes, key=lambda x: x["line"])
 
-            # Generate patch header
+            # 生成补丁头部
             patch_lines = self._generate_header(file_path)
-
-            # Generate hunks
             current_hunk = []
-            hunk_start = None
-            old_lines = new_lines = 0
-            original_lines = original_content.splitlines()
+            hunk_stats = {
+                "old_start": 0,
+                "old_lines": 0,
+                "new_start": 0,
+                "new_lines": 0,
+            }
 
-            for change in changes:
-                if not isinstance(change.get("line"), int):
-                    raise GitPatchError(f"Invalid line number in change: {change}")
+            def flush_hunk():
+                """将当前hunk写入补丁"""
+                if current_hunk:
+                    header = f"@@ -{hunk_stats['old_start']},{hunk_stats['old_lines']} +{hunk_stats['new_start']},{hunk_stats['new_lines']} @@\n"
+                    patch_lines.append(header)
+                    patch_lines.extend(current_hunk)
+                    current_hunk.clear()
+                    hunk_stats.update({"old_lines": 0, "new_lines": 0})
 
-                if hunk_start is None:
-                    hunk_start = max(1, change["line"] - self.context_lines)
+            def add_context_lines(start: int, end: int):
+                """添加上下文行"""
+                for i in range(start, min(end, len(original_lines))):
+                    current_hunk.append(f" {original_lines[i]}")  # 添加原有行
+                    hunk_stats["old_lines"] += 1
+                    hunk_stats["new_lines"] += 1
 
-                # Add context lines
-                while len(current_hunk) < change["line"] - hunk_start:
-                    line_idx = hunk_start + len(current_hunk) - 1
-                    if line_idx < len(original_lines):
-                        current_hunk.append(f" {original_lines[line_idx]}")
-                        old_lines += 1
-                        new_lines += 1
+            for i, change in enumerate(changes):
+                current_line = change["line"] - 1  # 转换为0基索引
 
-                # 处理代码块更改
-                def process_multiline_content(content: str) -> List[str]:
-                    """处理多行内容,返回行列表"""
-                    if not content:
-                        return []
-                    return content.split("\n")
+                # 确定hunk起始位置
+                if not current_hunk:
+                    start = max(0, current_line - self.context_lines)
+                    hunk_stats["old_start"] = start + 1
+                    hunk_stats["new_start"] = start + 1
+                    add_context_lines(start, current_line)
 
-                # Add the change
+                # 处理变更
                 if change["type"] == "modify":
-                    # 处理老内容
-                    old_lines_content = process_multiline_content(change["old"])
-                    for line in old_lines_content:
-                        current_hunk.append(f"-{line}")
-                        old_lines += 1
+                    old_content = change.get("old", "").splitlines(True)
+                    new_content = change.get("new", "").splitlines(True)
 
-                    # 处理新内容
-                    new_lines_content = process_multiline_content(change["new"])
-                    for line in new_lines_content:
+                    for line in old_content:
+                        current_hunk.append(f"-{line}")
+                        hunk_stats["old_lines"] += 1
+
+                    for line in new_content:
                         current_hunk.append(f"+{line}")
-                        new_lines += 1
+                        hunk_stats["new_lines"] += 1
 
                 elif change["type"] == "add":
-                    new_lines_content = process_multiline_content(change["new"])
-                    for line in new_lines_content:
+                    # 在添加新行时,确保保留当前行
+                    if current_line < len(original_lines):
+                        current_hunk.append(
+                            f" {original_lines[current_line]}"
+                        )  # 保留原有行
+                        hunk_stats["old_lines"] += 1
+                        hunk_stats["new_lines"] += 1
+
+                    new_content = change.get("new", "").splitlines(True)
+                    for line in new_content:
                         current_hunk.append(f"+{line}")
-                        new_lines += 1
+                        hunk_stats["new_lines"] += 1
 
                 elif change["type"] == "delete":
-                    old_lines_content = process_multiline_content(change["old"])
-                    for line in old_lines_content:
+                    old_content = change.get("old", "").splitlines(True)
+                    for line in old_content:
                         current_hunk.append(f"-{line}")
-                        old_lines += 1
+                        hunk_stats["old_lines"] += 1
 
-            # Add final context lines
-            if hunk_start is not None and changes:
-                last_change = changes[-1]
-                last_line = last_change["line"]
-
-                # 对于多行更改,需要计算实际的最后一行
-                if last_change.get("new"):
-                    last_line += len(process_multiline_content(last_change["new"]))
-                elif last_change.get("old"):
-                    last_line += len(process_multiline_content(last_change["old"]))
-
-                for i in range(self.context_lines):
-                    line_idx = last_line + i
-                    if line_idx < len(original_lines):
-                        current_hunk.append(f" {original_lines[line_idx]}")
-                        old_lines += 1
-                        new_lines += 1
-
-            # Add hunk header and content
-            if current_hunk:
-                hunk_header = (
-                    f"@@ -{hunk_start},{old_lines} +{hunk_start},{new_lines} @@"
+                # 添加后续上下文行
+                next_change_line = (
+                    changes[i + 1]["line"] - 1
+                    if i < len(changes) - 1
+                    else len(original_lines)
                 )
-                patch_lines.append(hunk_header)
-                patch_lines.extend(current_hunk)
+                context_end = min(
+                    current_line + self.context_lines + 1, next_change_line
+                )
+                add_context_lines(current_line + 1, context_end)
 
-            return "\n".join(patch_lines) + "\n"
+                # 如果与下一个变更距离过远，结束当前hunk
+                if (
+                    i < len(changes) - 1
+                    and changes[i + 1]["line"] - current_line
+                    > 2 * self.context_lines + 1
+                ):
+                    flush_hunk()
+
+            # 处理最后一个hunk
+            flush_hunk()
+            for i, p in enumerate(patch_lines):
+                if p.endswith("\n") and i != len(patch_lines):
+                    patch_lines[i] = p[:-1]
+            return "\n".join(patch_lines)
 
         except Exception as e:
             raise GitPatchError(f"Failed to generate patch: {str(e)}")
@@ -394,34 +405,85 @@ class GitPatchGenerator:
         target_file: str = None,
         force: bool = False,
     ) -> str:
-        """Safely apply patch with conflict checking"""
-        # Verify patch first
-        result, message = self.verify_patch(patch_content, source_file)
+        """安全地应用补丁，增加错误处理和状态跟踪"""
+        # 创建临时文件用于存储结果
+        temp_dir = tempfile.mkdtemp()
+        source_name = os.path.basename(source_file)
+        temp_file = os.path.join(temp_dir, f"{source_name}.tmp")
 
-        if result != VerificationResult.VALID and not force:
-            raise PatchConflictError(
-                f"Patch verification failed: {message}\n"
-                "Use force=True to apply patch despite conflicts"
-            )
+        # 复制源文件到临时文件
+        shutil.copy2(source_file, temp_file)
 
-        # Generate preview
-        preview = self.preview_patch(patch_content, source_file)
+        # 读取源文件
+        with open(temp_file, "r", encoding="utf-8") as f:
+            lines = f.readlines()
 
-        # Create target file
-        if target_file is None:
-            temp_dir = tempfile.mkdtemp()
-            source_name = os.path.basename(source_file)
-            target_file = os.path.join(temp_dir, f"{source_name}.patched")
+        # 验证补丁
+        if not force:
+            result, message = self.verify_patch(patch_content, temp_file)
+            if result != VerificationResult.VALID:
+                shutil.rmtree(temp_dir)
+                raise PatchConflictError(
+                    f"Patch verification failed: {message}\nUse force=True to apply patch despite conflicts"
+                )
 
-        # Write patched content
-        with open(target_file, "w", encoding="utf-8") as f:
-            f.writelines(preview.patched_lines)
+        # 解析并应用补丁
+        hunks = self._parse_patch(patch_content)
+        modified_lines = []
+        current_idx = 0
 
-        return target_file
+        for hunk in hunks:
+            try:
+                start_idx = hunk.start_line - 1
+
+                # 添加补丁前的未修改行
+                modified_lines.extend(lines[current_idx:start_idx])
+
+                # 应用补丁内容
+                for line in hunk.content:
+                    if line.startswith("+"):
+                        modified_lines.append("\n" + line[1:])  # 添加新行
+                    elif line.startswith(" "):
+                        if len(modified_lines) == start_idx:
+                            modified_lines.append(line[1:])  # 保持上下文行
+                        else:
+                            modified_lines.append("\n" + line[1:])  # 保持上下文行
+                        current_idx = start_idx + 1  # 更新当前索引
+
+                # 跳过被删除的行
+                current_idx = start_idx + hunk.old_count
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to apply hunk starting at line {hunk.start_line}: {str(e)}"
+                )
+                if not force:
+                    shutil.rmtree(temp_dir)
+                    raise
+
+        # 添加剩余未修改的行
+        modified_lines.extend(lines[current_idx:])
+
+        # 写入修改后的内容
+        final_target = (
+            target_file
+            if target_file
+            else os.path.join(temp_dir, f"{source_name}.patched")
+        )
+        with open(final_target, "w", encoding="utf-8") as f:
+            f.writelines(modified_lines)
+
+        # 如果成功，清理临时文件
+        if os.path.dirname(final_target) != temp_dir:
+            shutil.rmtree(temp_dir)
+
+        return final_target
 
     def _generate_header(self, file_path: str) -> List[str]:
         """Generate git patch header"""
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S +0000")
+        import pytz
+
+        timestamp = datetime.now(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S +0000")
         mode = "100644"  # Default mode for regular files
 
         return [
@@ -470,77 +532,136 @@ class GitPatchGenerator:
     def _verify_context(
         self, lines: List[str], start_idx: int, hunk_content: List[str]
     ) -> bool:
-        """Verify that context lines match the file content"""
-        file_idx = start_idx
+        """验证补丁上下文是否匹配"""
+        try:
+            file_idx = start_idx
 
-        for line in hunk_content:
-            if line.startswith(" "):  # Context line
-                if file_idx >= len(lines) or lines[file_idx].rstrip("\n") != line[
-                    1:
-                ].rstrip("\n"):
-                    return False
-                file_idx += 1
-            elif line.startswith("-"):  # Removed line
-                if file_idx >= len(lines) or lines[file_idx].rstrip("\n") != line[
-                    1:
-                ].rstrip("\n"):
-                    return False
-                file_idx += 1
-            else:  # Added line
-                continue
+            # 改进：预处理文件行，统一处理换行符
+            file_lines = [line.rstrip("\n") for line in lines]
 
-        return True
+            for line in hunk_content:
+                if line.startswith(" "):  # 上下文行
+                    if file_idx >= len(file_lines):
+                        logger.debug(
+                            f"Context verification failed: unexpected EOF at line {file_idx + 1}"
+                        )
+                        return False
+
+                    hunk_line = line[1:].rstrip("\n")  # 去除前导空格和换行符
+                    file_line = file_lines[file_idx]
+
+                    if hunk_line != file_line:
+                        logger.debug(f"Context mismatch at line {file_idx + 1}:")
+                        logger.debug(f"Expected: '{hunk_line}'")
+                        logger.debug(f"Found   : '{file_line}'")
+                        return False
+
+                    file_idx += 1
+                elif line.startswith("-"):
+                    file_idx += 1
+                # 对于 '+' 行不增加 file_idx
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error in context verification: {str(e)}", exc_info=True)
+            return False
+
+    def _calculate_line_numbers(
+        self, changes: List[Dict[str, Union[int, str]]]
+    ) -> Dict[str, int]:
+        """计算补丁应用后的行号变化"""
+        line_changes = defaultdict(int)
+
+        for change in changes:
+            line_num = change["line"]
+            if change["type"] == "add":
+                new_lines = len(change.get("new", "").splitlines())
+                line_changes[line_num] += new_lines
+            elif change["type"] == "delete":
+                old_lines = len(change.get("old", "").splitlines())
+                line_changes[line_num] -= old_lines
+            elif change["type"] == "modify":
+                old_lines = len(change.get("old", "").splitlines())
+                new_lines = len(change.get("new", "").splitlines())
+                line_changes[line_num] += new_lines - old_lines
+
+        return dict(line_changes)
 
     def _detect_conflicts(
         self, lines: List[str], start_idx: int, hunk: PatchHunk
     ) -> List[Dict[str, str]]:
-        """Detect conflicts in a hunk"""
+        """改进的冲突检测逻辑"""
         conflicts = []
         file_idx = start_idx
+        line_number = start_idx + 1
 
-        for i, line in enumerate(hunk.content):
-            if line.startswith("-") or line.startswith(" "):  # Line should match
-                if file_idx >= len(lines):
+        for line in hunk.content:
+            if file_idx >= len(lines):
+                if not line.startswith("+"):  # 只有添加行允许超出文件末尾
                     conflicts.append(
                         {
-                            "line": file_idx + 1,
+                            "line": line_number,
                             "existing": "<end of file>",
-                            "patch": line[1:],
-                            "description": f"Unexpected end of file at line {file_idx + 1}",
+                            "patch": line[1:].rstrip("\n"),
+                            "description": "Unexpected end of file",
                         }
                     )
-                elif lines[file_idx].rstrip("\n") != line[1:].rstrip("\n"):
+                continue
+
+            if line.startswith((" ", "-")):
+                file_line = lines[file_idx].rstrip("\n")
+                hunk_line = line[1:].rstrip("\n")
+
+                if file_line != hunk_line:
                     conflicts.append(
                         {
-                            "line": file_idx + 1,
-                            "existing": lines[file_idx].rstrip("\n"),
-                            "patch": line[1:].rstrip("\n"),
-                            "description": f"Content mismatch at line {file_idx + 1}",
+                            "line": line_number,
+                            "existing": file_line,
+                            "patch": hunk_line,
+                            "description": "Content mismatch",
                         }
                     )
+
                 file_idx += 1
+                if not line.startswith("-"):  # 不为删除行增加行号
+                    line_number += 1
+            else:  # 添加行
+                line_number += 1
 
         return conflicts
 
     def _track_changes(
         self, lines: List[str], start_idx: int, hunk: PatchHunk
     ) -> List[Dict[str, str]]:
-        """Track changes made by a hunk"""
         changes = []
         file_idx = start_idx
+        actual_line = start_idx + 1
 
         for line in hunk.content:
             if line.startswith("+"):
+                content = line[1:].rstrip("\n")
                 changes.append(
-                    {"description": f"Added line {file_idx + 1}: {line[1:].rstrip()}"}
+                    {
+                        "description": f"Added line {actual_line}: {content}",
+                        "line": actual_line,
+                        "content": content,
+                        "type": "add",
+                    }
                 )
+                actual_line += 1
             elif line.startswith("-"):
+                content = line[1:].rstrip("\n")
                 changes.append(
-                    {"description": f"Removed line {file_idx + 1}: {line[1:].rstrip()}"}
+                    {
+                        "description": f"Removed line {actual_line}: {content}",
+                        "line": actual_line,
+                        "content": content,
+                        "type": "delete",
+                    }
                 )
-                file_idx += 1
-            else:
-                file_idx += 1
+            else:  # Context line
+                actual_line += 1
 
         return changes
 
@@ -567,20 +688,36 @@ def generate_and_apply_patch_safely(
     Returns:
         Tuple[str, Optional[PatchPreview]]: Path to patched file and preview if requested
     """
-    generator = GitPatchGenerator(context_lines=context_lines)
-    patch = generator.generate_patch(source_file, changes)
+    """改进的主函数，增加错误处理和日志"""
+    try:
+        logger.info(f"Generating patch for {source_file} with {len(changes)} changes")
+        generator = GitPatchGenerator(context_lines=context_lines)
 
-    # Generate preview if requested
-    patch_preview = None
-    if preview:
-        patch_preview = generator.preview_patch(patch, source_file)
+        # 生成补丁
+        patch = generator.generate_patch(source_file, changes)
+        logger.debug(f"Generated patch content:\n{patch}")
 
-    # Apply patch
-    result_file = generator.apply_patch_safely(
-        patch, source_file, target_file, force=force
-    )
+        # 验证补丁
+        result, message = generator.verify_patch(patch, source_file)
+        logger.info(f"Patch verification result: {result.value} - {message}")
 
-    return result_file, patch_preview
+        # 生成预览
+        patch_preview = None
+        if preview:
+            patch_preview = generator.preview_patch(patch, source_file)
+            logger.debug("Generated patch preview")
+
+        # 应用补丁
+        result_file = generator.apply_patch_safely(
+            patch, source_file, target_file, force=force
+        )
+        logger.info(f"Successfully applied patch to {result_file}")
+
+        return result_file, patch_preview
+
+    except Exception as e:
+        logger.error(f"Failed to process patch: {str(e)}", exc_info=True)
+        raise
 
 
 def create_test_file(content: str, file_path: str):
@@ -593,7 +730,7 @@ def test_basic_patch():
     """Test basic patch generation and application"""
     print("\n=== Testing Basic Patch ===")
 
-    # Create test file
+    # 确保测试文件内容末尾有换行符
     source_content = """Line 1
 Line 2
 Line 3
@@ -603,33 +740,34 @@ Line 5
     source_file = "test_source.txt"
     create_test_file(source_content, source_file)
 
-    # Define changes
     changes = [
-        {"line": 2, "old": "Line 2", "new": "Modified Line 2", "type": "modify"},
-        {"line": 4, "new": "New Line", "old": "", "type": "add"},
+        {
+            "line": 2,
+            "old": "Line 2\n",  # 确保包含换行符
+            "new": "Modified Line 2\n",
+            "type": "modify",
+        },
+        {"line": 3, "new": "New Line\n", "type": "add"},
     ]
 
     try:
-        # Generate and apply patch with preview
+        logger.info("Generating and applying test patch")
         result_file, preview = generate_and_apply_patch_safely(
             source_file, changes, target_file="test_result.txt", preview=True
         )
 
-        # Show preview
         print("\nPatch Preview:")
         print(preview.get_preview())
 
-        print(f"\nPatch applied successfully to: {result_file}")
-
-        # Show final content
-        print("\nFinal content:")
         with open(result_file, "r") as f:
+            print("\nFinal content:")
             print(f.read())
 
     except GitPatchError as e:
+        logger.error(f"Test failed: {e}")
         print(f"Error: {e}")
     finally:
-        # Cleanup
+        # 清理测试文件
         for file in [source_file, "test_result.txt"]:
             if os.path.exists(file):
                 os.remove(file)
@@ -653,10 +791,11 @@ tools = [
     changes = [
         {
             "line": 1,
-            "old": "def old_function():\n    pass",
+            "old": "def old_function():",
             "new": '@tool\ndef fibonacci(n: int) -> list:\n    """\n    生成斐波那契数列\n    """\n    if n <= 0:\n        return []\n    elif n == 1:\n        return [0]\n    \n    fib = [0, 1]\n    for i in range(2, n):\n        fib.append(fib[i-1] + fib[i-2])\n    \n    return fib',
             "type": "modify",
-        }
+        },
+        {"line": 2, "old": "    pass", "new": "", "type": "delete"},
     ]
 
     try:
@@ -764,9 +903,47 @@ Line 5
             os.remove(source_file)
 
 
+def test_complex_patches():
+    """测试复杂补丁场景"""
+    source_content = """def test_function():
+    # Old comment
+    print("old code")
+    return None
+"""
+
+    changes = [
+        {
+            "line": 2,
+            "old": "    # Old comment\n",
+            "new": "    # New comment\n    # Additional comment\n",
+            "type": "modify",
+        },
+        {
+            "line": 3,
+            "old": '    print("old code")\n',
+            "new": '    print("new code")\n    print("additional line")\n',
+            "type": "modify",
+        },
+    ]
+
+    source_file = "test_complex.txt"
+    create_test_file(source_content, source_file)
+
+    try:
+        result_file, preview = generate_and_apply_patch_safely(
+            source_file, changes, preview=True
+        )
+        print("\nComplex patch preview:")
+        print(preview.get_preview())
+    finally:
+        if os.path.exists(source_file):
+            os.remove(source_file)
+
+
 if __name__ == "__main__":
     # Run all tests
     test_basic_patch()
     test_multiline_changes()
+    test_complex_patches()
     test_conflict_handling()
     test_patch_statistics()

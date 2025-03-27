@@ -1,26 +1,13 @@
 from hashlib import sha1
 import re
-from urllib.parse import urlparse
 from langchain.agents import tool
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import (
-    ChatPromptTemplate,
-)
-from langchain_core.output_parsers import StrOutputParser
 import os
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import ConfigurableField
-from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
-from langchain_community.chat_models import ChatPerplexity
-from langchain_mistralai.chat_models import ChatMistralAI
-from langchain_cohere import ChatCohere
 from pathlib import Path
 import sys
 
 from dotenv import load_dotenv
 
-from typing import Set, Dict
+from typing import Dict
 import pathspec
 import json
 
@@ -30,254 +17,10 @@ else:
     script_location = Path(__file__).parent.resolve()
 load_dotenv(dotenv_path=script_location / ".env")
 
-llm = ChatAnthropic(
-    model="claude-3-opus-20240229",
-    # max_tokens=,
-    temperature=0.9,
-    # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
-    streaming=True,
-    verbose=True,
-).configurable_alternatives(  # This gives this field an id
-    # When configuring the end runnable, we can then use this id to configure this field
-    ConfigurableField(id="model"),
-    # default_key="openai_gpt_4_turbo_preview",
-    default_key="anthropic_claude_3_opus",
-    anthropic_claude_3_5_sonnet=ChatAnthropic(
-        model="claude-3-5-sonnet-20240620",
-        max_tokens=2000,
-        temperature=0.9,
-        # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
-        streaming=True,
-        stream_usage=True,
-        verbose=True,
-    ),
-    openai_gpt_3_5_turbo_1106=ChatOpenAI(
-        model="gpt-3.5-turbo-1106",
-        verbose=True,
-        streaming=True,
-        temperature=0.9,
-    ),
-    openai_gpt_4_turbo_preview=ChatOpenAI(
-        temperature=0.9,
-        model="gpt-4-turbo-2024-04-09",
-        verbose=True,
-        streaming=True,
-    ),
-    openai_gpt_4o=ChatOpenAI(
-        temperature=0.9,
-        model="gpt-4o",
-        verbose=True,
-        streaming=True,
-    ),
-    openai_gpt_4o_mini=ChatOpenAI(
-        temperature=0.9,
-        model="gpt-4o-mini",
-        verbose=True,
-        streaming=True,
-    ),
-    pplx_sonar_medium_chat=ChatPerplexity(
-        model="sonar-medium-chat", temperature=0.9, verbose=True, streaming=True
-    ),
-    mistral_large=ChatMistralAI(
-        model="mistral-large-latest", temperature=0.9, verbose=True, streaming=True
-    ),
-    command_r_plus=ChatCohere(
-        model="command-r-plus", temperature=0.9, verbose=True, streaming=True
-    ),
-)
-
-from langchain_community.document_loaders import TextLoader
-
-
-@tool
-def load_file(path: str) -> str:
-    """
-    Useful when you need load file's content.
-    """
-    if os.path.exists(path=path):
-        loader = TextLoader(path)
-        docs = loader.load()
-        return "\n".join([doc.page_content for doc in docs])
-    return f"Path not exsits. {path}"
-
-
-import shutil
-
-
-@tool
-def copy_file_in_same_directory(source_path, new_filename=None):
-    """
-    Copy a file within the same directory.
-
-    Parameters:
-    source_path (str): The full path of the source file
-    new_filename (str, optional): The new filename. If not provided, a new name will be automatically generated.
-
-    Returns:
-    str: If the copy is successful, returns the full path of the new file; if it fails, returns None
-    """
-    try:
-        # Ensure the source file exists
-        if not os.path.exists(source_path):
-            print(f"Error: Source file '{source_path}' does not exist.")
-            return None
-
-        # Get the directory and filename of the source file
-        directory = os.path.dirname(source_path)
-        filename = os.path.basename(source_path)
-
-        # If no new filename is provided, generate one automatically
-        if new_filename is None:
-            name, extension = os.path.splitext(filename)
-            new_filename = f"{name}_copy{extension}"
-
-        # Ensure the new filename is not the same as the original filename
-        if new_filename == filename:
-            print("Error: New filename is the same as the original filename.")
-            return None
-
-        # Construct the full path of the new file
-        new_file_path = os.path.join(directory, new_filename)
-
-        # Copy the file
-        shutil.copy2(source_path, new_file_path)
-        print(f"File successfully copied: '{new_file_path}'")
-        return new_file_path
-
-    except PermissionError:
-        print(
-            f"Error: Permission denied to copy the file. Please check file permissions."
-        )
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-    return None
-
-
-def copy_file(source_path, new_filename=None):
-    directory, original_filename = os.path.split(source_path)
-    if not new_filename:
-        new_filename = f"copy_of_{original_filename}"
-    new_file_path = os.path.join(directory, new_filename)
-    shutil.copy2(source_path, new_file_path)
-    return new_file_path
-
-
-def apply_suggestions_to_file(file_path, suggestions):
-    with open(file_path, "r") as file:
-        lines = file.readlines()
-
-    # Sort suggestions by line number
-    suggestions.sort(key=lambda x: x["line_number"])
-
-    # Track the offset caused by insertions and deletions
-    offset = 0
-
-    for suggestion in suggestions:
-        line_number = suggestion["line_number"] + offset
-        new_code = suggestion["new_code"]
-        operation_type = suggestion.get(
-            "type", "update"
-        )  # Default to update if not specified
-
-        if 0 <= line_number < len(lines):
-            if operation_type == "insert":
-                lines.insert(line_number, new_code + "\n")
-                offset += 1
-            elif operation_type == "delete":
-                lines.pop(line_number)
-                offset -= 1
-            else:  # update
-                lines[line_number] = new_code + "\n"
-
-    with open(file_path, "w") as file:
-        file.writelines(lines)
-
-
-@tool
-def get_code_modification_suggestions(question: str, file_path: str) -> any:
-    """
-    Useful when you need generate code modification suggestions.
-    """
-    prompt_template = """
-You are an expert software engineer. Your task is to review given source code and make modifications based on specified issues or improvements. For each modification, you should provide the following details in the specified format:
-
-- line_number: The line number where the modification should be made (0-based index).
-- type: The type of modification (insert, update, or delete).
-- new_code: The new code that should replace the existing line or be inserted at the specified line number.
-
-If you need to delete a line, set `new_code` to an empty string and `type` to "delete".
-
-Note: *When making multiple modifications, consider that line numbers will change sequentially based on previous insertions or deletions.*
-
-The suggestions should be in the following JSON format:
-[
-    {{"line_number": LINE_NUMBER, "type": "TYPE", "new_code": "NEW_CODE"}},
-    {{"line_number": LINE_NUMBER, "type": "TYPE", "new_code": "NEW_CODE"}}
-]
-
-Here are some examples of different types of modifications:
-1. Modify an existing line:
-    Original Line (line 5): "x = 10"
-    Suggestion: {{"line_number": 5, "type": "update", "new_code": "x = 20"}}
-
-2. Insert a new line:
-    Original Line (line 3): "y = 5"
-    Suggestion: {{"line_number": 4, "type": "insert", "new_code": "print(y)"}}
-
-3. Delete an existing line:
-    Original Line (line 8): "z = 30"
-    Suggestion: {{"line_number": 8, "type": "delete", "new_code": ""}}
-
-Here is the source code and the issues/improvements that need to be addressed:
-```
-{source_code}
-```
-
-The issues and improvement requirements are as follows:
-{question}
-
-Please provide your suggestions in the specified JSON format, ensuring that each suggestion includes the "type" field with one of the values: "insert", "update", or "delete".
-"""
-    chain = ChatPromptTemplate.from_template(prompt_template) | llm | StrOutputParser()
-    result = chain.invoke(
-        {
-            "source_code": load_file.invoke({"path": file_path}),
-            "question": question,
-        },
-        config={"configurable": {"model": "anthropic_claude_3_5_sonnet"}},
-    )
-    return result
-
-
-@tool
-def apply_gpt_suggestions(source_file_path, suggestions, new_filename=None):
-    """
-    Apply the given modification suggestions to the copy of file.
-    Parameters:
-    source_code (str): The original source code as a single string.
-    suggestions (list): A list of suggestions where each suggestion is a dictionary
-                        with the following keys:
-                        - line_number (int): The 0-based index of the line to be modified.
-                        - new_code (str): The new code that should replace the existing
-                                          line or be inserted at the specified line number.
-                                          If this is an empty string, the existing line
-                                          will be deleted.
-    Returns:
-    str: The modified source code with all of the suggestions applied.
-    """
-    try:
-        copied_file_path = copy_file(source_file_path, new_filename)
-        apply_suggestions_to_file(copied_file_path, suggestions)
-        return copied_file_path
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return None
-
 
 @tool
 def get_workspace_dir() -> str:
-    """Usefule when you need get the current workspace directory."""
+    """Get the current workspace directory."""
     return os.getenv("WORKSPACE_DIR")
 
 
@@ -359,163 +102,74 @@ def list_workspace_directory(workspace_dir: str) -> str:
     return "\n".join(result)
 
 
-@tool
-def create_empty_file(file_path: str) -> str:
+def generate_git_patch(file_path: str, changes: list) -> str:
     """
-    Create a new empty file in workspace, if it doesn't exist.
+    Generate a git patch format string from changes list
 
     Args:
-        file_path (str): The path where the empty file should be created.
-            Can be either absolute or relative path.
+        file_path: Path of the file being modified
+        changes: List of change dictionaries with format:
+                {
+                    'line': int,       # Line number to modify
+                    'old': str,        # Original content
+                    'new': str,        # New content
+                    'type': str        # Change type: 'modify', 'add', or 'delete'
+                }
 
     Returns:
-        str: A string indicating the operation result:
-            - "file_exists": If the file already exists
-            - "success": If the file was created successfully
-            - "error: [error message]": If the creation failed, including the specific error message
+        str: Git patch format string
     """
-    try:
-        # Check if file already exists
-        if os.path.exists(file_path):
-            return f"Error: {file_path} file exists."
-        workspace = get_workspace_dir.invoke({})
-        if not is_path_under_workspace(file_path, workspace):
-            return f"Error:  Cannot create files outside of workspace. Workspace is {workspace}"
+    # Sort changes by line number
+    changes = sorted(changes, key=lambda x: x["line"])
 
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        # Create empty file
-        with open(file_path, "w") as f:
-            pass
-        return f"Create file success. The path is {file_path}"
+    # Generate patch header
+    patch = [
+        f"diff --git a/{file_path} b/{file_path}",
+        f"--- a/{file_path}",
+        f"+++ b/{file_path}",
+    ]
 
-    except OSError as e:
-        return f"error: {str(e)}"
+    current_hunk = []
+    current_line = 1
+    hunk_start = None
+    old_lines = 0
+    new_lines = 0
 
+    for change in changes:
+        # Start a new hunk if needed
+        if hunk_start is None:
+            hunk_start = change["line"]
 
-@tool
-def write_to_file(file_path, content, append=False):
-    """
-    Write normal text content to a specified file.
+        # Add context lines if there's a gap
+        while current_line < change["line"]:
+            current_hunk.append(f' {" "}')  # Context line
+            current_line += 1
+            old_lines += 1
+            new_lines += 1
 
-    Parameters:
-    -----------
-    file_path : str
-        The path of the file to write to. Must be a valid file path.
-    content : str
-        The content to write to the file.
-    append : bool, optional
-        If True, append to the end of the file if it exists;
-        if False, only write to new files (default).
+        # Add the change
+        if change["type"] == "modify":
+            current_hunk.append(f'-{change["old"]}')
+            current_hunk.append(f'+{change["new"]}')
+            old_lines += 1
+            new_lines += 1
+            current_line += 1
+        elif change["type"] == "add":
+            current_hunk.append(f'+{change["new"]}')
+            new_lines += 1
+            current_line += 1
+        elif change["type"] == "delete":
+            current_hunk.append(f'-{change["old"]}')
+            old_lines += 1
+            current_line += 1
 
-    Returns:
-    --------
-    str
-        A message describing the operation result.
-    """
-    # 验证输入参数
-    if not isinstance(file_path, str) or not file_path:
-        return "file_path must be a non-empty string"
-    if not isinstance(content, str):
-        return "content must be a string"
+    # Add hunk header
+    if current_hunk:
+        hunk_header = f"@@ -{hunk_start},{old_lines} +{hunk_start},{new_lines} @@"
+        patch.append(hunk_header)
+        patch.extend(current_hunk)
 
-    try:
-        # 确保使用绝对路径
-        if not os.path.isabs(file_path):
-            file_path = os.path.abspath(file_path)
-
-        # 检查文件是否存在
-        file_exists = os.path.exists(file_path)
-        if file_exists and not append:
-            return f"Error: Cannot write to existing file '{file_path}'. Use append=True to append content."
-
-        # 确保目录存在
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-        # 确定写入模式并写入内容
-        mode = "a" if append else "w"
-        with open(file_path, mode, encoding="utf-8") as file:
-            file.write(content)
-
-        # 准备返回信息
-        operation_type = "appended to" if append else "written to"
-        message = f"Successfully {operation_type} file '{file_path}'"
-
-        # 只在追加模式下提供继续写入的建议
-        if append:
-            message += "\nYou can continue to append more content using append=True"
-
-        message += f"\nFile path: {file_path}"
-
-        return message
-
-    except IOError as e:
-        return f"Error writing to file: {str(e)}"
-    except Exception as e:
-        return f"Unexpected error: {str(e)}"
-
-
-@tool
-def get_file_contents(file_path):
-    """
-    Read file and return content data with position information (optimized for git patch)
-
-    Args:
-        file_path (str): the full path to the file
-
-    Returns:
-        dict: Dictionary containing file information
-    """
-    from pathlib import Path
-
-    workspace = get_workspace_dir.invoke({})
-    if not is_path_under_workspace(file_path, workspace):
-        return (
-            f"Error:  Cannot read files outside of workspace. Workspace is {workspace}"
-        )
-    try:
-        # Read all lines with their line endings
-        with open(file_path, "r", encoding="utf-8") as f:
-            raw_lines = list(f)
-    except Exception as e:
-        return f"An error occurred while reading '{file_path}': {e}"
-
-    # Check if file ends with newline
-    has_newline = bool(raw_lines and raw_lines[-1].endswith("\n"))
-
-    # Store line endings
-    line_endings = []
-    for line in raw_lines:
-        if line.endswith("\r\n"):
-            line_endings.append("\r\n")
-        elif line.endswith("\n"):
-            line_endings.append("\n")
-        else:
-            line_endings.append("")
-
-    # Strip line endings for content
-    raw_lines = [line.rstrip("\r\n") for line in raw_lines]
-
-    # Process line information
-    lines_data = []
-
-    for idx, content in enumerate(raw_lines, start=1):
-
-        # Build line information
-        line_info = {
-            "number": idx,
-            "content": content,
-            "ending": line_endings[idx - 1],
-        }
-
-        lines_data.append(line_info)
-    doc = {
-        "file_path": str(Path(file_path)),
-        "lines": lines_data,
-        "has_newline": has_newline,
-    }
-    with open(f"{file_path}.content.json", "w", encoding="utf-8") as f:
-        f.write(json.dumps(doc))
-    return doc
+    return "\n".join(patch)
 
 
 def get_file_contents_ctx(file_path, context_lines=3):
@@ -598,11 +252,9 @@ def get_file_contents_ctx(file_path, context_lines=3):
     return doc
 
 
-@tool
 def generate_git_patch_and_apply(
     file_path: str,
-    patch_file_name: str,
-    changes=None,
+    changes: list = None,
     context_lines: int = 3,
 ):
     """
@@ -634,8 +286,10 @@ def generate_git_patch_and_apply(
             - target_file (str): Patch can be successfully applied. A new file will be generated at target_file (Original file will remain unchanged)
     """
     result = {"success": bool, "message": str}
-    if changes is None or not isinstance(changes, list):
-        return """Error: `changes` is required. `changes` list of change information in the format:
+    if changes is None or not isinstance(changes, list) or len(changes) == 0:
+        return {
+            "success": False,
+            "message": """Error: `changes` is required. `changes` list of change information in the format:
             [
                 {
                     'line': int,       # Line number to modify
@@ -644,7 +298,8 @@ def generate_git_patch_and_apply(
                     'type': str        # Change type: 'modify', 'add', or 'delete'
                 },
                 ...
-            ]"""
+            ]""",
+        }
     import os
     from hashlib import sha1
     import json
@@ -654,12 +309,18 @@ def generate_git_patch_and_apply(
         with open(file_path, "r", encoding="utf-8") as f:
             raw_lines = list(f)
     except Exception as e:
-        return f"An error occurred while reading '{file_path}': {e}"
+        return {
+            "success": False,
+            "message": f"An error occurred while reading '{file_path}': {e}",
+        }
 
     workspe_dir = get_workspace_dir.invoke({})
     if not is_path_under_workspace(file_path, workspe_dir):
-        return f"Error:  Cannot create files outside of workspace. Workspace is {workspe_dir}"
-    output_path = workspe_dir + "/patches/" + patch_file_name
+        return {
+            "success": False,
+            "message": f"Error:  Cannot create files outside of workspace. Workspace is {workspe_dir}",
+        }
+    output_path = workspe_dir + "/patches/" + os.path.basename(file_path) + ".patch"
     # Save changes for reference
     os.makedirs(os.path.dirname(workspe_dir + "/patches/"), exist_ok=True)
     # with open(f"{output_path}.change.json", "w", encoding="utf-8") as f:
@@ -802,12 +463,16 @@ def generate_git_patch_and_apply(
         if err_line_number is not None:
             if err_line_number not in line_contents_ctx:
                 err_line_number = err_line_number - context_lines
-            source_data = line_contents_ctx[err_line_number]
+            if err_line_number in line_contents_ctx:
+                source_data = line_contents_ctx[err_line_number]
             base_name = os.path.basename(file_path)
             result = {
                 "success": False,
                 "patch_content": patch_content,
-                "message": f"Check the patch file ({output_path}) failed.\n{e}\n{base_name} in line:{err_line_number} content is:\n{json.dumps(source_data)}",
+                "message": (
+                    f"Check the patch file ({output_path}) failed.\n"
+                    f"{e}\n{base_name} in line:{err_line_number} content is:\n{json.dumps(source_data) if source_data else ''}"
+                ),
             }
             return result
         else:
@@ -825,7 +490,6 @@ import shutil
 import tempfile
 from contextlib import contextmanager
 from git import Git, Repo
-from git.exc import GitCommandError
 from pathlib import Path
 
 
@@ -844,6 +508,19 @@ def temporary_git_repo(workspace: str = None):
         shutil.rmtree(temp_dir)
 
 
+def is_path_under_workspace(file_path, workspace_path):
+    # 获取两个路径的绝对路径
+    abs_file = os.path.abspath(file_path)
+    abs_workspace = os.path.abspath(workspace_path)
+
+    # 使用 os.path.commonpath 比较
+    try:
+        common_path = os.path.commonpath([abs_file, abs_workspace])
+        return common_path == abs_workspace
+    except ValueError:  # 当路径在不同驱动器时会抛出异常
+        return False
+
+
 def validate_paths(*paths):
     """Validate that all provided paths exist.
 
@@ -856,19 +533,6 @@ def validate_paths(*paths):
     for path in paths:
         if not os.path.exists(path):
             raise FileNotFoundError(f"Path not found: {path}")
-
-
-def is_path_under_workspace(file_path, workspace_path):
-    # 获取两个路径的绝对路径
-    abs_file = os.path.abspath(file_path)
-    abs_workspace = os.path.abspath(workspace_path)
-
-    # 使用 os.path.commonpath 比较
-    try:
-        common_path = os.path.commonpath([abs_file, abs_workspace])
-        return common_path == abs_workspace
-    except ValueError:  # 当路径在不同驱动器时会抛出异常
-        return False
 
 
 def apply_patch_with_git(
@@ -893,9 +557,15 @@ def apply_patch_with_git(
     """
     workspace_dir = get_workspace_dir.invoke({})
     if not is_path_under_workspace(patch_file, workspace_dir):
-        return f"Error:  Cannot create files outside of workspace. Workspace is {workspace_dir}"
+        return {
+            "success": False,
+            "message": f"Error:  Cannot create files outside of workspace. Workspace is {workspace_dir}",
+        }
     if not is_path_under_workspace(source_file, workspace_dir):
-        return f"Error:  Cannot create files outside of workspace. Workspace is {workspace_dir}"
+        return {
+            "success": False,
+            "message": f"Error:  Cannot create files outside of workspace. Workspace is {workspace_dir}",
+        }
 
     def _prepare_paths():
         """Prepare and validate all file paths."""
@@ -996,15 +666,97 @@ def apply_patch_with_git(
         }
 
 
+@tool
+def generate_new_version_file(file_path: str):
+    """Generate a new version of the file based on the modification requirements.
+    Execute a file modification task, which will eventually modify the file on the copy of the file.
+    First, performs generates the change list data, then generates a git patch based on the change list data, and finally applies the git patch to the copy of the file.
+    Change list is in the format as follow:
+        [
+            {
+                'line': int,       # Line number to modify
+                'old': str,        # Original content
+                'new': str,        # New content
+                'type': str        # Change type: 'modify', 'add', or 'delete'
+            },
+            ...
+        ]
+
+    Args:
+        file_path (str): The full path of the source file.
+
+        Returns:
+        dict: A dictionary containing the patch application results with the following keys:
+            - success (bool): True if patch was applied successfully
+            - message (str): Descriptive message about the operation result
+            - conflicts (bool): True if there were conflicts during patch application
+            - dry_run (bool): True if this was a dry run operation
+            - target_file (str): Patch can be successfully applied. A new file will be generated at target_file (Original file will remain unchanged)
+    """
+    return file_path
+
+
+@tool
+def create_empty_file(file_path: str) -> str:
+    """
+    Create a new empty file in workspace, if it doesn't exist.
+
+    Args:
+        file_path (str): The path where the empty file should be created.
+            Can be either absolute or relative path.
+
+    Returns:
+        str: A string indicating the operation result:
+            - "file_exists": If the file already exists
+            - "success": If the file was created successfully
+            - "error: [error message]": If the creation failed, including the specific error message
+    """
+    try:
+        # Check if file already exists
+        if os.path.exists(file_path):
+            return f"Error: {file_path} file exists."
+        workspace = get_workspace_dir.invoke({})
+        if not is_path_under_workspace(file_path, workspace):
+            return f"Error:  Cannot create files outside of workspace. Workspace is {workspace}"
+
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        # Create empty file
+        with open(file_path, "w") as f:
+            pass
+        return f"Create file success. The path is {file_path}"
+
+    except OSError as e:
+        return f"error: {str(e)}"
+
+
+@tool
+def run_one_step(name: str, description: str, file_path: str):
+    """Perform one code modification step of the step-by-step tasks to complete programming requirements
+
+    Args:
+                name (str): Step's name
+        description: Description of the steps and what needs to be achieved
+    """
+    return {"name": name, "description": description, "file_path": file_path}
+
+
+@tool
+def design_code_modification_plan(data: list[dict]):
+    """After analyzing the code, design a step-by-step plan for modifying the code that contains only the specific steps to modify the code. 
+    Note: The step descriptions must be specific and unambiguous.
+
+    Args:
+            data (list[dict]): Data of plan.
+                Element in the list is a dict with:
+                - name (str): Step's name.
+                - description(str):Description of the steps and what needs to be achieved about source code.
+    """
+    return data
+
+
 tools = [
-    get_workspace_dir,
-    list_workspace_directory,
-    # load_file,
-    # write_to_file,
-    create_empty_file,
-    get_file_contents,
-    generate_git_patch_and_apply,
-    # apply_patch_with_git,
-    # apply_gpt_suggestions,
-    # get_code_modification_suggestions,
+    # generate_new_version_file,
+    # create_empty_file,
+    design_code_modification_plan,
+    run_one_step,
 ]
