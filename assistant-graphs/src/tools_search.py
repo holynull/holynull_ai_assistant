@@ -188,8 +188,20 @@ def search_image(terms: str) -> str:
 
 
 @tool
-def access_links_content(links: list[str]):
-    """Access the links content"""
+def access_links_content(links: list[dict]):
+    """Access the links content.
+    Args:
+        list: A list containing data in the following format:
+        [
+            {
+                "title": "News article title",
+                "link": "Article URL",
+                "snippet": "Article snippet or description",
+                "imageUrl": "Related image URL (if available)"
+            },
+            ...
+        ]
+    """
     return {"search_result": [{"link": link} for link in links]}
 
 

@@ -17,10 +17,10 @@ export default function RootLayout({
 	children: React.ReactNode;
 }) {
 	return (
-		<html lang="en" className="h-full">
-			<body className={`${inter.className} h-full`}>
+		<html lang="en">
+			<body className={`${inter.className}`}>
 				<div
-					className="flex flex-col h-full w-full"
+					className="flex flex-col w-full"
 					style={{ background: "rgb(38, 38, 41)" }}
 				>
 					<AppKit cookies={null}>
