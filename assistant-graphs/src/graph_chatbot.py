@@ -28,6 +28,7 @@ from graph_search import graph as search_webpage_graph
 
 # from graph_programmer import graph as programmer_graph
 from graph_code_analysis import graph as code_analysis_graph
+from graph_image import graph as image_graph
 
 llm = ChatAnthropic(
     model="claude-3-5-sonnet-20241022",
@@ -168,6 +169,7 @@ graph_builder.add_node(node_router)
 graph_builder.add_node(search_webpage_graph.get_name(), search_webpage_graph)
 # graph_builder.add_node(programmer_graph)
 graph_builder.add_node(code_analysis_graph)
+graph_builder.add_node(image_graph)
 
 graph_builder.add_node(router_tools.get_name(), router_tools)
 graph_builder.add_edge(START, node_llm.get_name())
@@ -180,5 +182,6 @@ graph_builder.add_edge(router_tools.get_name(), node_router.__name__)
 graph_builder.add_edge(search_webpage_graph.get_name(), node_llm.get_name())
 # graph_builder.add_edge(programmer_graph.get_name(), node_llm.get_name())
 graph_builder.add_edge(code_analysis_graph.get_name(), node_llm.get_name())
+graph_builder.add_edge(image_graph.get_name(), node_llm.get_name())
 graph = graph_builder.compile()
-graph.name="holynull_assistant"
+graph.name = "holynull_assistant"

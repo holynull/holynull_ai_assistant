@@ -21,7 +21,7 @@ def route_to_programmer_agent():
     """
     This tool will hand over the question to a Programmer Expert.
     Expert capabilities include:
-	   - Perform step-by-step tasks to complete programming requirements
+           - Perform step-by-step tasks to complete programming requirements
     """
     return "Now requesting a Programmer Expert."
 
@@ -39,6 +39,16 @@ def route_to_code_analysis_agent():
 
 
 @tool
+def route_to_image_agent():
+    """
+    This tool will hand over the question to a Text-to-Image Generation Expert.
+    Expert capabilities include:
+        - Generate images and return markdown format image links of generated images, separated by newlines.
+    """
+    return "Now requesting a Text-to-Image Generation Expert."
+
+
+@tool
 def get_utc_time():
     """
     Useful when you need to get the current UTC time of the system.
@@ -52,6 +62,7 @@ def get_utc_time():
 from graph_search import graph as search_webpage_graph
 from graph_programmer import graph as programmer_graph
 from graph_code_analysis import graph as code_analysis_graph
+from graph_image import graph as image_graph
 
 
 def get_next_node(tool_name: str):
@@ -61,6 +72,8 @@ def get_next_node(tool_name: str):
         return programmer_graph.get_name()
     elif tool_name == route_to_code_analysis_agent.get_name():
         return code_analysis_graph.get_name()
+    elif tool_name == route_to_image_agent.get_name():
+        return image_graph.get_name()
     else:
         return None
 
@@ -70,4 +83,5 @@ tools = [
     route_to_search_agent,
     # route_to_programmer_agent,
     route_to_code_analysis_agent,
+    route_to_image_agent,
 ]
