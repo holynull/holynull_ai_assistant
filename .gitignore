@@ -139,6 +139,9 @@ vectorstore.pkl
 langchain.readthedocs.io/
 .vercel
 
+.langgraph-data/
+.langgraph_api/
+
 bin/
 pyvenv.cfg
 node_modules/
