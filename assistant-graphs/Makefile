@@ -67,3 +67,17 @@ help:
 
 start:
 	langgraph dev --port 2025 
+
+start_redis:
+	docker run -d --name redis-server \
+	-p 6379:6379 \
+	-v ~/redis-data:/data \
+	redis redis-server --appendonly yes
+
+start_postgres:
+	docker run --name postgres -p 5432:5432 \
+	-e POSTGRES_DB=my_db \
+	-e POSTGRES_USER=root \
+	-e POSTGRES_PASSWORD=123456 \
+	-v ~/docker/postgres/data:/var/lib/postgresql/data \
+	-d postgres
