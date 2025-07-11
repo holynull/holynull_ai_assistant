@@ -25,7 +25,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 
 _llm = ChatAnthropic(
-    model="claude-3-7-sonnet-20250219",
+    model="claude-sonnet-4-20250514",
     max_tokens=4096,
     temperature=0.9,
     # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
@@ -249,7 +249,7 @@ async def getDocumentFromLink(
 
 async def node_read_content(state: LinkRelaventContentState):
     splits = await getDocumentFromLink(
-        state["link"], chunk_size=5000, chunk_overlap=1500
+        state["link"], chunk_size=5000, chunk_overlap=900
     )
     if state["message_id"] not in message_id_map:
         message_id_map[state["message_id"]] = {}

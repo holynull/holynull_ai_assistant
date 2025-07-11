@@ -7,23 +7,39 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.runnables import (
     RunnableConfig,
 )
+from langchain_core.runnables import ConfigurableField
+from langchain_core.language_models import BaseChatModel
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
-_llm = ChatAnthropic(
-    model="claude-3-7-sonnet-20250219",
-    max_tokens=4096,
-    temperature=0.9,
-    # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
-    streaming=True,
-    stream_usage=True,
-    verbose=True,
-)
+
+def _getModel(key: str):
+    if key == "anthropic_claude_4_sonnet":
+        return ChatAnthropic(
+            model="claude-sonnet-4-20250514",
+            # max_tokens=,
+            temperature=0.9,
+            # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
+            streaming=True,
+            verbose=True,
+        )
+    elif key == "anthropic_claude_4_opus":
+        return ChatAnthropic(
+            model="claude-opus-4-20250514",
+            # max_tokens=,
+            temperature=0.9,
+            # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
+            streaming=True,
+            verbose=True,
+        )
+    else:
+        raise Exception("Unsupported model key")
 
 
 class GraphState(TypedDict):
     messages: Annotated[list, add_messages]
+    llm: str
 
 
 graph_builder = StateGraph(GraphState)
@@ -45,21 +61,25 @@ system_template = SystemMessagePromptTemplate.from_template(system_prompt)
 
 
 def call_model_swap(state: GraphState, config: RunnableConfig) -> GraphState:
-    llm_with_tools = _llm.bind_tools(tools)
+    model_key = state.get("llm", "anthropic_claude_4_sonnet")
+    llm = _getModel(model_key)
+    llm_configed = cast(BaseChatModel, llm).bind_tools(tools)
     system_message = system_template.format_messages()
     response = cast(
-        AIMessage, llm_with_tools.invoke(system_message + state["messages"], config)
+        AIMessage, llm_configed.invoke(system_message + state["messages"], config)
     )
 
     return {"messages": [response]}
 
 
 async def acall_model_swap(state: GraphState, config: RunnableConfig) -> GraphState:
-    llm_with_tools = _llm.bind_tools(tools)
+    model_key = state.get("llm", "anthropic_claude_4_sonnet")
+    llm = _getModel(model_key)
+    llm_configed = cast(BaseChatModel, llm).bind_tools(tools)
     system_message = system_template.format_messages()
     response = cast(
         AIMessage,
-        await llm_with_tools.ainvoke(system_message + state["messages"], config),
+        await llm_configed.ainvoke(system_message + state["messages"], config),
     )
 
     return {"messages": [response]}

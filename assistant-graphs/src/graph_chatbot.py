@@ -30,36 +30,15 @@ from graph_search import graph as search_webpage_graph
 from graph_code_analysis import graph as code_analysis_graph
 from graph_image import graph as image_graph
 
-llm = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
-    max_tokens=4096,
-    temperature=0.9,
-    # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
-    streaming=True,
-    stream_usage=True,
-    verbose=True,
-).configurable_alternatives(  # This gives this field an id
-    # When configuring the end runnable, we can then use this id to configure this field
-    ConfigurableField(id="llm"),
-    # default_key="openai_gpt_4_turbo_preview",
-    default_key="anthropic_claude_3_5_sonnet",
-    anthropic_claude_3_opus=ChatAnthropic(
-        model="claude-3-opus-20240229",
-        # max_tokens=,
-        temperature=0.9,
-        # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
-        streaming=True,
-        verbose=True,
-    ),
-    anthropic_claude_3_7_sonnet=ChatAnthropic(
-        model="claude-3-7-sonnet-20250219",
-        # max_tokens=,
-        temperature=0.9,
-        # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
-        streaming=True,
-        verbose=True,
-    ),
-)
+
+llm=ChatAnthropic(
+            model="claude-sonnet-4-20250514",
+            # max_tokens=,
+            temperature=0.9,
+            # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
+            streaming=True,
+            verbose=True,
+        )
 
 
 class State(TypedDict):
@@ -80,15 +59,7 @@ system_template = SystemMessagePromptTemplate.from_template(system_prompt)
 
 
 def call_model(state: State, config: RunnableConfig):
-    llm_configed = (
-        cast(BaseChatModel, llm)
-        .bind_tools(tools_router)
-        .with_config(
-            {
-                "configurable": {"llm": state["llm"]},
-            }
-        )
-    )
+    llm_configed = cast(BaseChatModel, llm).bind_tools(tools_router)
     system_message = system_template.format_messages(
         time_zone=state["time_zone"],
     )
@@ -103,15 +74,7 @@ def call_model(state: State, config: RunnableConfig):
 
 
 async def acall_model(state: State, config: RunnableConfig):
-    llm_configed = (
-        cast(BaseChatModel, llm)
-        .bind_tools(tools_router)
-        .with_config(
-            {
-                "configurable": {"llm": state["llm"]},
-            }
-        )
-    )
+    llm_configed = cast(BaseChatModel, llm).bind_tools(tools_router)
     system_message = system_template.format_messages(
         time_zone=state["time_zone"],
     )

@@ -16,7 +16,7 @@ from langgraph.types import Command
 import copy
 
 _llm = ChatAnthropic(
-    model="claude-3-7-sonnet-20250219",
+    model="claude-sonnet-4-20250514",
     max_tokens=4096,
     temperature=0.9,
     # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
