@@ -1,3 +1,6 @@
+import asyncio
+import logging
+import traceback
 from typing import Dict, Optional
 from fastapi import FastAPI, Request
 from pydantic import BaseModel, Field
@@ -10,16 +13,17 @@ from langsmith import Client
 
 app = FastAPI()
 
-lsclient = Client(api_key=os.getenv("LANGCHAIN_API_KEY"))
+lsclient = Client()
 
 
 @app.post("/api/runs/share")
 async def runs_share(request: Request) -> dict:
     try:
         body = await request.json()
-        sharedRunURL = lsclient.share_run(run_id=body["runId"])
+        sharedRunURL = await asyncio.to_thread(lsclient.share_run, body["runId"])
         return {"success": True, "sharedRunURL": sharedRunURL, "code": 200}
     except Exception as e:
+        logging.error(traceback.format_exc())
         return {"success": False, "message": e, "code": 400}
 
 
