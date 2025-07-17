@@ -172,8 +172,8 @@ def get_file_contents(file_path):
         "lines": lines_data,
         "has_newline": has_newline,
     }
-    with open(f"{file_path}.content.json", "w", encoding="utf-8") as f:
-        f.write(json.dumps(doc))
+    # with open(f"{file_path}.content.json", "w", encoding="utf-8") as f:
+    #     f.write(json.dumps(doc))
     return doc
 
 

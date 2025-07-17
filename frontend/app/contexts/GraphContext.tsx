@@ -203,6 +203,7 @@ export function GraphProvider({ children }: { children: ReactNode }) {
 				configurable: {
 					model_name: selectedModel,
 				},
+				recursion_limit: 50
 			},
 		});
 
@@ -350,298 +351,6 @@ export function GraphProvider({ children }: { children: ReactNode }) {
 						return [...prevMessages, searchResultToolMsg];
 					});
 				}
-				if (chunk?.data?.name === "connect_to_wallet") {
-					connectWallet()
-				}
-				if (chunk?.data?.name === 'change_network_to') {
-					let content = chunk.data.data.output.content;
-					const result = JSON.parse(content)
-					change_network_to(result)
-				}
-				if (["generate_approve_erc20"].includes(chunk.data.name)) {
-					let content = chunk.data.data.output.content;
-					try {
-						const result = JSON.parse(content);
-						let chainType: "evm" | "sol" | "tron" | undefined = undefined;
-						let txData: any = null;
-						let txName: string = '';
-						if (Array.isArray(result) && result.length >= 2) {
-							txData = result[1] as any;
-							if (txData["chain_id"] != chainId && txData['chain_id'] !== 'tron') {
-								await _change_network_to(txData["chain_id"])
-							}
-							// setTxDataEvm(txData);
-							// setShowSendEvmTx(true);
-							chainType = 'evm';
-							txData = txData;
-							txName = txData['name']
-							setMessages((prevMessages) => {
-								const searchResultToolMsg = new AIMessage({
-									content: "",
-									tool_calls: [
-										{
-											name: "generate_approve_erc20",
-											args: { txData: txData, name: txName, orderInfo: undefined, tx_detail: result[1]?.tx_detail },
-										},
-									],
-								});
-								return [...prevMessages, searchResultToolMsg];
-							});
-						}
-					} catch (e) {
-						console.error(e)
-					}
-				}
-				if (chunk.data.name === 'generate_swap_tx_data') {
-					let content = chunk.data.data.output.content;
-					try {
-						let result = JSON.parse(content);
-						let orderInfo: any = null;
-						let chainType = "";
-						let txName: string = '';
-						if (Array.isArray(result) && result.length >= 2) {
-							result = result[1] as any;
-							if (result["success"]) {
-								orderInfo = result.order_info;
-								const swap_data = result["swap_data"] as any;
-								txName = swap_data.name;
-								if (!swap_data.chain_type) {
-									throw new Error("Missing chain_type in swap data");
-								}
-								if (swap_data.chain_type === "evm") {
-									chainType = 'evm'
-									setMessages((prevMessages) => {
-										const searchResultToolMsg = new AIMessage({
-											content: "",
-											tool_calls: [
-												{
-													name: "send_evm_transaction",
-													args: { txData: swap_data.txData, name: txName, orderInfo: orderInfo, tx_detail: result?.tx_detail },
-												},
-											],
-										});
-										return [...prevMessages, searchResultToolMsg];
-									});
-								} else if (swap_data.chain_type === "solana") {
-									if (!connection) {
-										wcModal.switchNetwork(solana)
-									}
-									chainType = 'sol'
-									setMessages((prevMessages) => {
-										const searchResultToolMsg = new AIMessage({
-											content: "",
-											tool_calls: [
-												{
-													name: "send_solana_transaction",
-													args: { txData: swap_data.txData, name: txName, orderInfo: orderInfo, tx_detail: result?.tx_detail },
-												},
-											],
-										});
-										return [...prevMessages, searchResultToolMsg];
-									});
-								}
-								// else if (swap_data.chain_type === "tron") {
-								// 	if (!connection) {
-								// 		wcModal.switchNetwork(solana)
-								// 		// open({ view: "Connect" })
-								// 	}
-								// 	chainType = 'tron'
-
-								// } 
-								else {
-									throw new DOMException('Unsupported chain type:', swap_data.chain_type)
-								}
-							}
-						}
-					} catch (e) {
-						console.error(e)
-					}
-				}
-				if (chunk.data.name === 'get_available_tokens') {
-					let content = chunk.data.data.output.content;
-					try {
-						let result = JSON.parse(content);
-						setMessages((prevMessages) => {
-							const toolMsg = new AIMessage({
-								content: "",
-								tool_calls: [
-									{
-										name: "get_available_tokens",
-										args: { data: result },
-									},
-								],
-							});
-							return [...prevMessages, toolMsg];
-						});
-					} catch (e) {
-						console.error(e)
-					}
-				}
-				if (chunk.data.name === 'swap_quote') {
-					let content = chunk.data.data.output.content;
-					try {
-						let result = JSON.parse(content);
-						setMessages((prevMessages) => {
-							const toolMsg = new AIMessage({
-								content: "",
-								tool_calls: [
-									{
-										name: "swap_quote",
-										args: { data: result },
-									},
-								],
-							});
-							return [...prevMessages, toolMsg];
-						});
-					} catch (e) {
-						console.error(e)
-					}
-				}
-				if (chunk.data.name === 'get_transaction_records') {
-					let content = chunk.data.data.output.content;
-					try {
-						let result = JSON.parse(content);
-						setMessages((prevMessages) => {
-							const toolMsg = new AIMessage({
-								content: "",
-								tool_calls: [
-									{
-										name: "get_transaction_records",
-										args: { data: result.list },
-									},
-								],
-							});
-							return [...prevMessages, toolMsg];
-						});
-					} catch (e) {
-						console.error(e)
-					}
-				}
-				if (chunk.data.name === 'get_transaction_details') {
-					let content = chunk.data.data.output.content;
-					try {
-						let result = JSON.parse(content);
-						setMessages((prevMessages) => {
-							const toolMsg = new AIMessage({
-								content: "",
-								tool_calls: [
-									{
-										name: "get_transaction_details",
-										args: { data: result },
-									},
-								],
-							});
-							return [...prevMessages, toolMsg];
-						});
-					} catch (e) {
-						console.error(e)
-					}
-				}
-				if (chunk.data.name === 'get_balance_of_address') {
-					let content = chunk.data.data.output.content;
-					try {
-						let result = JSON.parse(content);
-						setMessages((prevMessages) => {
-							const toolMsg = new AIMessage({
-								content: "",
-								tool_calls: [
-									{
-										name: "get_balance_of_address",
-										args: { data: result },
-									},
-								],
-							});
-							return [...prevMessages, toolMsg];
-						});
-					} catch (e) {
-						console.error(e)
-					}
-				}
-
-				if (chunk.data.name === 'get_erc20_decimals') {
-					let content = chunk.data.data.output.content;
-					try {
-						let result = JSON.parse(content);
-						setMessages((prevMessages) => {
-							const toolMsg = new AIMessage({
-								content: "",
-								tool_calls: [
-									{
-										name: "get_erc20_decimals",
-										args: { data: result },
-									},
-								],
-							});
-							return [...prevMessages, toolMsg];
-						});
-					} catch (e) {
-						console.error(e)
-					}
-				}
-
-				if (chunk.data.name === 'allowance_erc20') {
-					let content = chunk.data.data.output.content;
-					try {
-						let result = JSON.parse(content);
-						setMessages((prevMessages) => {
-							const toolMsg = new AIMessage({
-								content: "",
-								tool_calls: [
-									{
-										name: "allowance_erc20",
-										args: { data: result },
-									},
-								],
-							});
-							return [...prevMessages, toolMsg];
-						});
-					} catch (e) {
-						console.error(e)
-					}
-				}
-
-				if (chunk.data.name === 'get_sol_balance') {
-					let content = chunk.data.data.output.content;
-					try {
-						let result = JSON.parse(content);
-						setMessages((prevMessages) => {
-							const toolMsg = new AIMessage({
-								content: "",
-								tool_calls: [
-									{
-										name: "get_sol_balance",
-										args: { data: result },
-									},
-								],
-							});
-							return [...prevMessages, toolMsg];
-						});
-					} catch (e) {
-						console.error(e)
-					}
-				}
-
-				if (chunk.data.name === 'get_spl_token_balance') {
-					let content = chunk.data.data.output.content;
-					try {
-						let result = JSON.parse(content);
-						setMessages((prevMessages) => {
-							const toolMsg = new AIMessage({
-								content: "",
-								tool_calls: [
-									{
-										name: "get_spl_token_balance",
-										args: { data: result },
-									},
-								],
-							});
-							return [...prevMessages, toolMsg];
-						});
-					} catch (e) {
-						console.error(e)
-					}
-				}
-
 				if (chunk.data.name === 'gen_images') {
 					let content = chunk.data.data.output.content;
 					try {
@@ -736,7 +445,7 @@ export function GraphProvider({ children }: { children: ReactNode }) {
 
 				if (node === 'node_read_content_reduce') {
 					first_read_content_run_id = "";
-					read_link_end_counter = 0;
+					read_link_end_counter = 0
 					read_link_start_counter = 0;
 
 				}
@@ -747,6 +456,9 @@ export function GraphProvider({ children }: { children: ReactNode }) {
 				}
 			}
 		}
+
+		let thread = await getThreadById(currentThreadId)
+		switchSelectedThread(thread)
 
 		if (runing_id) {
 			// Chain `.then` to not block the stream
@@ -902,296 +614,6 @@ export function GraphProvider({ children }: { children: ReactNode }) {
 					],
 				}),];
 			}
-
-			if (msg.type === "tool" && ["generate_approve_erc20"].includes(msg.name)) {
-				const output = msg.content;
-				if (output) {
-					try {
-						const result = JSON.parse(output);
-						let chainType: "evm" | "sol" | "tron" | undefined = undefined;
-						let txData: any = null;
-						let txName: string = '';
-						if (Array.isArray(result) && result.length >= 2) {
-							txData = result[1] as any;
-							chainType = 'evm';
-							txData = txData;
-							txName = txData['name']
-							return [new AIMessage({
-								...msg,
-								content: "",
-								tool_calls: [
-									{
-										name: "generate_approve_erc20",
-										args: { txData: txData, name: txName, orderInfo: undefined, tx_detail: result[1]?.tx_detail },
-									},
-								],
-							})];
-						}
-					} catch (e) {
-						return []
-					}
-				}
-			}
-
-			if (msg.type === "tool" && msg.name === 'generate_swap_tx_data') {
-				const output = msg.content;
-				if (output) {
-					try {
-						let result = JSON.parse(output);
-						let orderInfo: any = null;
-						let chainType = "";
-						let txName: string = '';
-						if (Array.isArray(result) && result.length >= 2) {
-							result = result[1] as any;
-							if (result["success"]) {
-								orderInfo = result.order_info;
-								const swap_data = result["swap_data"] as any;
-								txName = swap_data.name;
-								if (!swap_data.chain_type) {
-									throw new Error("Missing chain_type in swap data");
-								}
-								if (swap_data.chain_type === "evm") {
-									chainType = 'evm'
-									return [new AIMessage({
-										...msg,
-										content: "",
-										tool_calls: [
-											{
-												name: "send_evm_transaction",
-												args: { txData: swap_data.txData, name: txName, orderInfo: orderInfo, tx_detail: result?.tx_detail },
-											},
-										],
-									})];
-								} else if (swap_data.chain_type === "solana") {
-									if (!connection) {
-										wcModal.switchNetwork(solana)
-									}
-									chainType = 'sol'
-									return [new AIMessage({
-										...msg,
-										content: "",
-										tool_calls: [
-											{
-												name: "send_solana_transaction",
-												args: { txData: swap_data.txData, name: txName, orderInfo: orderInfo, tx_detail: result?.tx_detail },
-											},
-										],
-									})];
-								}
-								// else if (swap_data.chain_type === "tron") {
-								// 	if (!connection) {
-								// 		wcModal.switchNetwork(solana)
-								// 		// open({ view: "Connect" })
-								// 	}
-								// 	chainType = 'tron'
-
-								// } 
-								else {
-									throw new DOMException('Unsupported chain type:', swap_data.chain_type)
-								}
-							}
-						}
-					} catch (e) {
-						return []
-					}
-				}
-			}
-			if (msg.type === "tool" && msg.name === 'get_available_tokens') {
-				const output = msg.content;
-				if (output) {
-					try {
-						let result = JSON.parse(output);
-						return [new AIMessage({
-							...msg,
-							content: "",
-							tool_calls: [
-								{
-									name: "get_available_tokens",
-									args: { data: result },
-								},
-							],
-						})];
-					}
-					catch (e) {
-						return []
-					}
-				}
-			}
-			if (msg.type === "tool" && msg.name === 'swap_quote') {
-				const output = msg.content;
-				if (output) {
-					try {
-						let result = JSON.parse(output);
-						return [new AIMessage({
-							...msg,
-							content: "",
-							tool_calls: [
-								{
-									name: "swap_quote",
-									args: { data: result },
-								},
-							],
-						})];
-					}
-					catch (e) {
-						return []
-					}
-				}
-			}
-			if (msg.type === "tool" && msg.name === 'get_transaction_records') {
-				const output = msg.content;
-				if (output) {
-					try {
-						let result = JSON.parse(output);
-						return [new AIMessage({
-							...msg,
-							content: "",
-							tool_calls: [
-								{
-									name: "get_transaction_records",
-									args: { data: result.list },
-								},
-							],
-						})];
-					}
-					catch (e) {
-						return []
-					}
-				}
-			}
-
-			if (msg.type === "tool" && msg.name === 'get_transaction_details') {
-				const output = msg.content;
-				if (output) {
-					try {
-						let result = JSON.parse(output);
-						return [new AIMessage({
-							...msg,
-							content: "",
-							tool_calls: [
-								{
-									name: "get_transaction_details",
-									args: { data: result },
-								},
-							],
-						})];
-					}
-					catch (e) {
-						return []
-					}
-				}
-			}
-
-			if (msg.type === "tool" && msg.name === 'get_balance_of_address') {
-				const output = msg.content;
-				if (output) {
-					try {
-						let result = JSON.parse(output);
-						return [new AIMessage({
-							...msg,
-							content: "",
-							tool_calls: [
-								{
-									name: "get_balance_of_address",
-									args: { data: result },
-								},
-							],
-						})];
-					}
-					catch (e) {
-						return []
-					}
-				}
-			}
-
-			if (msg.type === "tool" && msg.name === 'get_erc20_decimals') {
-				const output = msg.content;
-				if (output) {
-					try {
-						let result = JSON.parse(output);
-						return [new AIMessage({
-							...msg,
-							content: "",
-							tool_calls: [
-								{
-									name: "get_erc20_decimals",
-									args: { data: result },
-								},
-							],
-						})];
-					}
-					catch (e) {
-						return []
-					}
-				}
-			}
-
-			if (msg.type === "tool" && msg.name === 'allowance_erc20') {
-				const output = msg.content;
-				if (output) {
-					try {
-						let result = JSON.parse(output);
-						return [new AIMessage({
-							...msg,
-							content: "",
-							tool_calls: [
-								{
-									name: "allowance_erc20",
-									args: { data: result },
-								},
-							],
-						})];
-					}
-					catch (e) {
-						return []
-					}
-				}
-			}
-
-			if (msg.type === "tool" && msg.name === 'get_sol_balance') {
-				const output = msg.content;
-				if (output) {
-					try {
-						let result = JSON.parse(output);
-						return [new AIMessage({
-							...msg,
-							content: "",
-							tool_calls: [
-								{
-									name: "get_sol_balance",
-									args: { data: result },
-								},
-							],
-						})];
-					}
-					catch (e) {
-						return []
-					}
-				}
-			}
-
-			if (msg.type === "tool" && msg.name === 'get_spl_token_balance') {
-				const output = msg.content;
-				if (output) {
-					try {
-						let result = JSON.parse(output);
-						return [new AIMessage({
-							...msg,
-							content: "",
-							tool_calls: [
-								{
-									name: "get_spl_token_balance",
-									args: { data: result },
-								},
-							],
-						})];
-					}
-					catch (e) {
-						return []
-					}
-				}
-			}
-
 			if (msg.type === "tool" && msg.name === 'gen_images') {
 				const output = msg.content;
 				if (output) {
@@ -1216,8 +638,45 @@ export function GraphProvider({ children }: { children: ReactNode }) {
 
 			return []; // Return an empty array for any other message types
 		});
+		// Process messages and merge consecutive AI messages
+		const mergeConsecutiveAIMessages = (messages: BaseMessage[]): BaseMessage[] => {
+			const mergedMessages: BaseMessage[] = [];
 
-		setMessages(actualMessages);
+			for (let i = 0; i < messages.length; i++) {
+				const currentMessage = messages[i];
+
+				// Check if current message is AI and previous message is also AI
+				if (currentMessage instanceof AIMessage &&
+					mergedMessages.length > 0 &&
+					mergedMessages[mergedMessages.length - 1] instanceof AIMessage) {
+
+					const previousMessage = mergedMessages[mergedMessages.length - 1] as AIMessage;
+
+					// Merge the content of current AI message with previous AI message
+					const mergedContent = String(previousMessage.content) + String(currentMessage.content);
+
+					// Create new merged AI message
+					const mergedMessage = new AIMessage({
+						...previousMessage,
+						content: mergedContent,
+						// Preserve tool_calls from the latest message if they exist
+						tool_calls: currentMessage.tool_calls || previousMessage.tool_calls,
+					});
+
+					// Replace the last message with the merged one
+					mergedMessages[mergedMessages.length - 1] = mergedMessage;
+				} else {
+					// Add message as is
+					mergedMessages.push(currentMessage);
+				}
+			}
+
+			return mergedMessages;
+		};
+
+		// Process and merge messages
+		const mergedMessages = mergeConsecutiveAIMessages(actualMessages);
+		setMessages(mergedMessages);
 	};
 
 	const contextValue: GraphContentType = {
