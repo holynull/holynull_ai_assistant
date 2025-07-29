@@ -65,7 +65,7 @@ export const ThreadChat: FC<ThreadChatProps> = (props: ThreadChatProps) => {
 	return (
 		<ThreadPrimitive.Root className="flex flex-col h-screen overflow-hidden w-full">
 			{!isEmpty ? (
-				<ThreadPrimitive.Viewport autoScroll={false}
+				<ThreadPrimitive.Viewport autoScroll={true}
 					className={cn(
 						"flex-1 overflow-y-auto scroll-smooth bg-inherit transition-all duration-300 ease-in-out w-full",
 						isEmpty ? "pb-[30vh] sm:pb-[50vh]" : "pb-32 sm:pb-24",

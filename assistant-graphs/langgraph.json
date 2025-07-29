@@ -3,7 +3,7 @@
 		"."
 	],
 	"graphs": {
-		"holynull_assistant": "./src/graph_chatbot.py:graph"
+		"network": "./src/graph_network.py:graph"
 	},
 	"env": ".env",
 	"http": {

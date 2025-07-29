@@ -33,6 +33,15 @@ def _getModel(key: str):
             streaming=True,
             verbose=True,
         )
+    elif key == "anthropic_claude_3_7_sonnet":
+        return ChatAnthropic(
+            model="claude-3-7-sonnet-20250219",
+            # max_tokens=,
+            temperature=0.9,
+            # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
+            streaming=True,
+            verbose=True,
+        )
     else:
         raise Exception("Unsupported model key")
 

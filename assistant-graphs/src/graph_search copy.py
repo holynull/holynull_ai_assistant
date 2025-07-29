@@ -50,13 +50,13 @@ class State(TypedDict):
 
 graph_builder = StateGraph(State)
 
-from tools_search import (
+from tools.tools_search import (
     tools,
     search_webpage,
     search_news,
     access_links_content,
 )
-from tools_agent_router import generate_routing_tools
+from tools.tools_agent_router import generate_routing_tools
 
 from langchain_core.prompts import SystemMessagePromptTemplate, ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -67,7 +67,7 @@ from langgraph.utils.runnable import RunnableCallable
 from langchain_community.document_transformers import Html2TextTransformer
 
 
-from prompt_search import system_prompt
+from prompts.prompt_search import system_prompt
 
 system_template = SystemMessagePromptTemplate.from_template(system_prompt)
 

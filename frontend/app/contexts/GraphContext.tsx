@@ -196,7 +196,7 @@ export function GraphProvider({ children }: { children: ReactNode }) {
 			// pdf_files: currentPDFs,
 		};
 
-		const stream = client.runs.stream(currentThreadId, "holynull_assistant", {
+		const stream = client.runs.stream(currentThreadId, "network", {
 			input,
 			streamMode: "events",
 			config: {
@@ -217,6 +217,28 @@ export function GraphProvider({ children }: { children: ReactNode }) {
 
 		for await (const chunk of stream) {
 			console.log(chunk.data)
+			if (chunk.data.error) {
+				setMessages((prevMessages) => {
+					let pre_len = prevMessages.length
+					if (pre_len > 0) {
+						// Create a new array with the updated message
+						return [
+							...prevMessages,
+							new AIMessage({
+								...prevMessages[pre_len - 1],
+								content:
+									prevMessages[pre_len - 1].content +
+									"System Message: Error occured.",
+							}),
+						];
+					} else {
+						const newMessage = new AIMessage({
+							content: "System Message: Error occured.",
+						});
+						return [...prevMessages, newMessage];
+					}
+				});
+			}
 			if (!runingId && chunk.data?.metadata?.run_id) {
 				setRuningId(chunk.data.metadata.run_id)
 			}
@@ -273,7 +295,7 @@ export function GraphProvider({ children }: { children: ReactNode }) {
 
 			if (chunk.data.event === "on_chat_model_stream") {
 
-				if (["node_llm_chatbot", "node_llm_code_analysis", "node_llm_programmer", "node_llm_search"]
+				if (["node_router", "node_llm_chatbot", "node_llm_code_analysis", "node_llm_programmer", "node_llm_search"]
 					.includes(chunk.data.metadata.langgraph_node)) {
 					const message = chunk.data.data.chunk;
 					if (message.content && Array.isArray(message.content) && message.content.length > 0) {

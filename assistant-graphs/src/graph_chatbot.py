@@ -40,6 +40,36 @@ llm=ChatAnthropic(
             verbose=True,
         )
 
+def _getModel(key: str):
+    if key == "anthropic_claude_4_sonnet":
+        return ChatAnthropic(
+            model="claude-sonnet-4-20250514",
+            # max_tokens=,
+            temperature=0.9,
+            # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
+            streaming=True,
+            verbose=True,
+        )
+    elif key == "anthropic_claude_4_opus":
+        return ChatAnthropic(
+            model="claude-opus-4-20250514",
+            # max_tokens=,
+            temperature=0.9,
+            # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
+            streaming=True,
+            verbose=True,
+        )
+    elif key == "anthropic_claude_3_7_sonnet":
+        return ChatAnthropic(
+            model="claude-3-7-sonnet-20250219",
+            # max_tokens=,
+            temperature=0.9,
+            # anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "not_provided"),
+            streaming=True,
+            verbose=True,
+        )
+    else:
+        raise Exception("Unsupported model key")
 
 class State(TypedDict):
     # Messages have the type "list". The `add_messages` function
@@ -59,6 +89,8 @@ system_template = SystemMessagePromptTemplate.from_template(system_prompt)
 
 
 def call_model(state: State, config: RunnableConfig):
+    model_key = state.get("llm", "anthropic_claude_3_7_sonnet")
+    llm = _getModel(model_key)
     llm_configed = cast(BaseChatModel, llm).bind_tools(tools_router)
     system_message = system_template.format_messages(
         time_zone=state["time_zone"],
@@ -74,6 +106,8 @@ def call_model(state: State, config: RunnableConfig):
 
 
 async def acall_model(state: State, config: RunnableConfig):
+    model_key = state.get("llm", "anthropic_claude_3_7_sonnet")
+    llm = _getModel(model_key)
     llm_configed = cast(BaseChatModel, llm).bind_tools(tools_router)
     system_message = system_template.format_messages(
         time_zone=state["time_zone"],

@@ -1,51 +1,7 @@
 import datetime
+from typing import Optional
 from langchain_core.tools import tool
-
-
-@tool
-def route_to_search_agent():
-    """
-    This tool will hand over the question to a Search Engine Expert.
-    Expert capabilities include:
-        - Performs a web search using Google search engine and returns formatted results.
-        - Performs a news search using Google News and returns formatted results in JSON format.
-        - Performs a place search using Google Places API and returns raw search results.
-        - Performs an image search using Google Images and returns raw search results.
-        - Access the links content
-    """
-    return "Now requesting a Search Engine Expert."
-
-
-@tool
-def route_to_programmer_agent():
-    """
-    This tool will hand over the question to a Programmer Expert.
-    Expert capabilities include:
-           - Perform step-by-step tasks to complete programming requirements
-    """
-    return "Now requesting a Programmer Expert."
-
-
-@tool
-def route_to_code_analysis_agent():
-    """
-    This tool will hand over the question to a Code Analysis Expert.
-    Expert capabilities include:
-        - Analysis code
-        - Get the current workspace directory.
-        - Generate a tree-like string representation of the workspace directory structure, respecting .gitignore rules.
-    """
-    return "Now requesting a Programmer Expert."
-
-
-@tool
-def route_to_image_agent():
-    """
-    This tool will hand over the question to a Text-to-Image Generation Expert.
-    Expert capabilities include:
-        - Generate images and return markdown format image links of generated images, separated by newlines.
-    """
-    return "Now requesting a Text-to-Image Generation Expert."
+from agent_config import ROUTE_MAPPING, get_agent_by_tool, AGENT_CONFIGS, load_graph
 
 
 @tool
@@ -59,29 +15,52 @@ def get_utc_time():
     return datetime.datetime.now(tz=pytz.UTC).isoformat(" ")
 
 
-from graph_search import graph as search_webpage_graph
-from graph_programmer import graph as programmer_graph
-from graph_code_analysis import graph as code_analysis_graph
-from graph_image import graph as image_graph
-
-
-def get_next_node(tool_name: str):
-    if tool_name == route_to_search_agent.get_name():
-        return search_webpage_graph.get_name()
-    elif tool_name == route_to_programmer_agent.get_name():
-        return programmer_graph.get_name()
-    elif tool_name == route_to_code_analysis_agent.get_name():
-        return code_analysis_graph.get_name()
-    elif tool_name == route_to_image_agent.get_name():
-        return image_graph.get_name()
-    else:
+def get_next_node(tool_name: str) -> Optional[str]:
+    """获取下一个节点名称"""
+    agent_config = get_agent_by_tool(tool_name)
+    if not agent_config:
+        print(f"No agent config found for tool: {tool_name}")
         return None
 
+    # 动态导入子图
+    agent_id = ROUTE_MAPPING.get(tool_name)
+    graph = load_graph(agent_id)
+    if not graph:
+        print(f"Failed to load graph for agent: {agent_id}")
+        return None
 
-tools = [
-    get_utc_time,
-    route_to_search_agent,
-    # route_to_programmer_agent,
-    route_to_code_analysis_agent,
-    route_to_image_agent,
-]
+    return graph.get_name()
+
+
+# 自动生成路由工具
+def generate_routing_tools():
+    """根据配置自动生成路由工具"""
+    from langchain_core.tools import tool
+
+    tools = []
+
+    for agent_id, config in AGENT_CONFIGS.items():
+        # 首先创建描述文本
+        desc = f"This tool will hand over the question to a {config.name}.\nExpert capabilities include:\n"
+        for cap in config.capabilities:
+            desc += f"- {cap}\n"
+
+        # 使用闭包创建唯一的函数
+        def create_route_function(current_agent_id, current_config):
+            tool_name = f"route_to_{current_config.graph_name}"
+
+            @tool(name_or_callable=tool_name, description=desc)
+            def route_func(query=None):
+                return f"Now requesting a {current_config.name}."
+
+            return route_func
+
+        # 创建并添加函数
+        route_func = create_route_function(agent_id, config)
+        tools.append(route_func)
+
+    return tools
+
+
+# 生成所有路由工具
+tools = generate_routing_tools() + [get_utc_time]  # 添加非路由工具
